@@ -71,10 +71,11 @@ export interface CryptoProvider {
       bytes: Uint8Array;
       mime: string;
     }>;
-  }): Promise<MessageEnvelope>;
+  }): Promise<{ envelope: MessageEnvelope; ciphertext: Uint8Array }>;
 
   decryptFromMany(params: {
     envelope: MessageEnvelope;
+    ciphertext: Uint8Array;
     myPrivateKey: UnlockedKeyHandle;
   }): Promise<{
     plaintext: Uint8Array;

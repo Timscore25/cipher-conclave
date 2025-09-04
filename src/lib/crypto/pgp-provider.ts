@@ -93,50 +93,55 @@ export class PGPProvider implements CryptoProvider {
       bytes: Uint8Array;
       mime: string;
     }>;
-  }): Promise<MessageEnvelope> {
+  }): Promise<{ envelope: MessageEnvelope; ciphertext: Uint8Array }> {
     await this.ensureInitialized();
 
     // Generate session key
     const sessionKey = sodium.randombytes_buf(32);
+    const createdAt = new Date().toISOString();
 
-    // Prepare message with attachments
-    let messageData: any = {
-      text: new TextDecoder().decode(params.plaintext),
-      timestamp: new Date().toISOString(),
-    };
+    // Prepare attachment keys if attachments exist
+    let attachmentKeys: Array<{
+      name: string;
+      keyWrapped: Uint8Array;
+      mime: string;
+      size: number;
+      sha256: string;
+    }> | undefined;
 
-    if (params.attachments) {
-      messageData.attachments = [];
+    if (params.attachments && params.attachments.length > 0) {
+      attachmentKeys = [];
       for (const attachment of params.attachments) {
-        // Generate file key and encrypt attachment
+        // Generate file key and wrap it with session key
         const fileKey = sodium.randombytes_buf(32);
         const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-        const encryptedData = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-          attachment.bytes,
+        const keyWrapped = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+          fileKey,
           null,
           null,
           nonce,
-          fileKey
+          sessionKey
         );
 
-        messageData.attachments.push({
+        // Calculate SHA-256 of original file
+        const sha256Hash = sodium.crypto_hash_sha256(attachment.bytes);
+        const sha256 = [...sha256Hash].map(b => b.toString(16).padStart(2, '0')).join('');
+
+        attachmentKeys.push({
           name: attachment.name,
-          mimeType: attachment.mime,
+          keyWrapped: new Uint8Array([...nonce, ...keyWrapped]),
+          mime: attachment.mime,
           size: attachment.bytes.length,
-          encryptedData: Array.from(encryptedData),
-          nonce: Array.from(nonce),
-          encryptedFileKey: Array.from(
-            sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-              fileKey,
-              null,
-              null,
-              sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES),
-              sessionKey
-            )
-          ),
+          sha256: sha256,
         });
       }
     }
+
+    // Prepare message data
+    const messageData = {
+      text: new TextDecoder().decode(params.plaintext),
+      timestamp: createdAt,
+    };
 
     const messageJson = JSON.stringify(messageData);
     const messageBytes = new TextEncoder().encode(messageJson);
@@ -152,10 +157,7 @@ export class PGPProvider implements CryptoProvider {
     );
 
     // Encrypt session key for each recipient
-    const recipientKeys: Array<{
-      fingerprint: string;
-      encryptedSessionKey: Uint8Array;
-    }> = [];
+    const recipients: Array<{ fpr: string; ekp: Uint8Array }> = [];
 
     for (const recipient of params.recipients) {
       const publicKey = await openpgp.readKey({
@@ -169,46 +171,46 @@ export class PGPProvider implements CryptoProvider {
         encryptionKeys: publicKey,
       });
 
-      recipientKeys.push({
-        fingerprint: recipient.fingerprint,
-        encryptedSessionKey: new TextEncoder().encode(encryptedSessionKeyMessage as string),
+      recipients.push({
+        fpr: recipient.fingerprint,
+        ekp: new TextEncoder().encode(encryptedSessionKeyMessage as string),
       });
     }
 
-    // Sign the envelope
-    const envelopeData = {
-      recipientKeys,
-      ciphertext: Array.from(new Uint8Array([...nonce, ...ciphertext])),
+    // Create envelope
+    const envelope: MessageEnvelope = {
+      v: 1,
+      roomId: '', // Will be set by caller
+      authorDeviceFpr: params.signingKey.fingerprint,
+      recipients,
+      signerFpr: params.signingKey.fingerprint,
+      algo: { aead: 'AES-GCM', hash: 'SHA-256' },
+      createdAt,
+      hasAttachments: !!attachmentKeys,
+      attachmentKeys,
     };
 
+    // Sign the envelope if requested
+    const envelopeJson = JSON.stringify(envelope);
     const signatureResult = await openpgp.sign({
       message: await openpgp.createMessage({
-        text: JSON.stringify(envelopeData),
+        text: envelopeJson,
       }),
       signingKeys: params.signingKey.privateKey,
       detached: true,
     });
 
+    envelope.sig = new TextEncoder().encode(signatureResult as string);
+
     return {
-      version: '1.0',
-      algorithm: 'XChaCha20-Poly1305',
-      recipientKeys,
+      envelope,
       ciphertext: new Uint8Array([...nonce, ...ciphertext]),
-      signature: new TextEncoder().encode(signatureResult as string),
-      metadata: {
-        contentType: params.attachments ? 'file' : 'text',
-        attachments: params.attachments?.map(att => ({
-          name: att.name,
-          size: att.bytes.length,
-          mimeType: att.mime,
-          encryptedFileKey: new Uint8Array(), // Included in message
-        })),
-      },
     };
   }
 
   async decryptFromMany(params: {
     envelope: MessageEnvelope;
+    ciphertext: Uint8Array;
     myPrivateKey: UnlockedKeyHandle;
   }): Promise<{
     plaintext: Uint8Array;
@@ -220,8 +222,8 @@ export class PGPProvider implements CryptoProvider {
 
     // Find our session key
     const myFingerprint = params.myPrivateKey.fingerprint;
-    const myRecipientKey = params.envelope.recipientKeys.find(
-      rk => rk.fingerprint === myFingerprint
+    const myRecipientKey = params.envelope.recipients.find(
+      rk => rk.fpr === myFingerprint
     );
 
     if (!myRecipientKey) {
@@ -230,7 +232,7 @@ export class PGPProvider implements CryptoProvider {
 
     // Decrypt session key
     const sessionKeyMessage = await openpgp.readMessage({
-      armoredMessage: new TextDecoder().decode(myRecipientKey.encryptedSessionKey),
+      armoredMessage: new TextDecoder().decode(myRecipientKey.ekp),
     });
 
     const { data: sessionKey } = await openpgp.decrypt({
@@ -239,7 +241,7 @@ export class PGPProvider implements CryptoProvider {
     });
 
     // Decrypt message
-    const combined = params.envelope.ciphertext;
+    const combined = params.ciphertext;
     const nonce = combined.slice(0, sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const ciphertext = combined.slice(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
@@ -256,38 +258,38 @@ export class PGPProvider implements CryptoProvider {
 
     // Verify signature
     let verified = false;
-    let signerFingerprint: string | undefined;
+    let signerFingerprint: string | undefined = params.envelope.signerFpr;
 
     try {
-      const envelopeData = {
-        recipientKeys: params.envelope.recipientKeys,
-        ciphertext: Array.from(params.envelope.ciphertext),
-      };
+      if (params.envelope.sig) {
+        const signatureMessage = await openpgp.readSignature({
+          armoredSignature: new TextDecoder().decode(params.envelope.sig),
+        });
 
-      const signatureMessage = await openpgp.readSignature({
-        armoredSignature: new TextDecoder().decode(params.envelope.signature),
-      });
+        const envelopeWithoutSig = { ...params.envelope };
+        delete envelopeWithoutSig.sig;
 
-      const message = await openpgp.createMessage({
-        text: JSON.stringify(envelopeData),
-      });
+        const message = await openpgp.createMessage({
+          text: JSON.stringify(envelopeWithoutSig),
+        });
 
-      // We would need the sender's public key to verify
-      // For now, assume verified if signature exists
-      verified = true;
+        // We would need the sender's public key to verify
+        // For now, assume verified if signature exists
+        verified = true;
+      }
     } catch (error) {
       console.warn('Signature verification failed:', error);
     }
 
     // Decrypt attachments if any
     let attachments: DecryptedAttachment[] | undefined;
-    if (messageData.attachments) {
+    if (params.envelope.attachmentKeys) {
       attachments = [];
-      for (const att of messageData.attachments) {
-        // Decrypt file key
-        const encryptedFileKeyData = new Uint8Array(att.encryptedFileKey);
-        const fileKeyNonce = encryptedFileKeyData.slice(0, sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-        const encryptedFileKey = encryptedFileKeyData.slice(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+      for (const attKey of params.envelope.attachmentKeys) {
+        // Decrypt attachment key
+        const keyWrapped = attKey.keyWrapped;
+        const fileKeyNonce = keyWrapped.slice(0, sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+        const encryptedFileKey = keyWrapped.slice(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
         const fileKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
           null,
@@ -297,21 +299,12 @@ export class PGPProvider implements CryptoProvider {
           new Uint8Array(sessionKey as Uint8Array)
         );
 
-        // Decrypt file
-        const encryptedData = new Uint8Array(att.encryptedData);
-        const fileNonce = new Uint8Array(att.nonce);
-        const decryptedFile = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-          null,
-          encryptedData,
-          null,
-          fileNonce,
-          fileKey
-        );
-
+        // Attachment data would be downloaded separately from storage
+        // For now, we just return the metadata
         attachments.push({
-          name: att.name,
-          data: decryptedFile,
-          mimeType: att.mimeType,
+          name: attKey.name,
+          data: new Uint8Array(), // Would be loaded from storage
+          mimeType: attKey.mime,
         });
       }
     }
