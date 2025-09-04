@@ -11,25 +11,29 @@ export interface UnlockedKeyHandle {
   fingerprint: string;
 }
 
-export interface MessageEnvelope {
-  version: string;
-  algorithm: string;
-  recipientKeys: Array<{
-    fingerprint: string;
-    encryptedSessionKey: Uint8Array;
-  }>;
-  ciphertext: Uint8Array;
-  signature: Uint8Array;
-  metadata: {
-    contentType: 'text' | 'file' | 'system';
-    attachments?: Array<{
-      name: string;
-      size: number;
-      mimeType: string;
-      encryptedFileKey: Uint8Array;
-    }>;
-  };
-}
+export type RecipientPacket = { 
+  fpr: string; 
+  ekp: Uint8Array; // encrypted key packet
+};
+
+export type MessageEnvelope = {
+  v: 1;
+  roomId: string;
+  authorDeviceFpr: string;
+  recipients: RecipientPacket[];   // one per device fingerprint
+  signerFpr: string;
+  algo: { aead: 'AES-GCM'; hash: 'SHA-256' };
+  createdAt: string;               // ISO
+  hasAttachments?: boolean;
+  attachmentKeys?: {
+    name: string;
+    keyWrapped: Uint8Array;
+    mime: string;
+    size: number;
+    sha256: string;
+  }[];
+  sig?: Uint8Array;                // detached signature for metadata if used
+};
 
 export interface DecryptedAttachment {
   name: string;

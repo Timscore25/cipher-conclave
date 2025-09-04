@@ -1,1 +1,10 @@
 project_id = "ddttwqzfbzjntxieeusd"
+
+[functions.rooms]
+verify_jwt = true
+
+[functions.messages]
+verify_jwt = true
+
+[functions.attachments]
+verify_jwt = true
