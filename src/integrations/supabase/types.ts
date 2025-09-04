@@ -14,7 +14,242 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attachments: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          mime_type: string
+          sha256: string
+          size: number
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          mime_type: string
+          sha256: string
+          size: number
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          mime_type?: string
+          sha256?: string
+          size?: number
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      devices: {
+        Row: {
+          created_at: string
+          fingerprint: string
+          id: string
+          label: string
+          public_key_armored: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fingerprint: string
+          id?: string
+          label: string
+          public_key_armored: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fingerprint?: string
+          id?: string
+          label?: string
+          public_key_armored?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      key_verifications: {
+        Row: {
+          method: Database["public"]["Enums"]["verification_method"]
+          target_fpr: string
+          verified_at: string
+          verifier_device_id: string
+        }
+        Insert: {
+          method: Database["public"]["Enums"]["verification_method"]
+          target_fpr: string
+          verified_at?: string
+          verifier_device_id: string
+        }
+        Update: {
+          method?: Database["public"]["Enums"]["verification_method"]
+          target_fpr?: string
+          verified_at?: string
+          verifier_device_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "key_verifications_verifier_device_id_fkey"
+            columns: ["verifier_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          author_device_id: string
+          ciphertext: string
+          content_type: Database["public"]["Enums"]["message_content_type"]
+          created_at: string
+          envelope: Json
+          id: string
+          room_id: string
+          signer_fpr: string
+        }
+        Insert: {
+          author_device_id: string
+          ciphertext: string
+          content_type?: Database["public"]["Enums"]["message_content_type"]
+          created_at?: string
+          envelope: Json
+          id?: string
+          room_id: string
+          signer_fpr: string
+        }
+        Update: {
+          author_device_id?: string
+          ciphertext?: string
+          content_type?: Database["public"]["Enums"]["message_content_type"]
+          created_at?: string
+          envelope?: Json
+          id?: string
+          room_id?: string
+          signer_fpr?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_author_device_id_fkey"
+            columns: ["author_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_members: {
+        Row: {
+          added_at: string
+          device_id: string
+          role: Database["public"]["Enums"]["room_member_role"]
+          room_id: string
+        }
+        Insert: {
+          added_at?: string
+          device_id: string
+          role?: Database["public"]["Enums"]["room_member_role"]
+          room_id: string
+        }
+        Update: {
+          added_at?: string
+          device_id?: string
+          role?: Database["public"]["Enums"]["room_member_role"]
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_members_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rooms_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +258,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      message_content_type: "text" | "file" | "system"
+      room_member_role: "admin" | "member"
+      verification_method: "qr" | "sas"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +387,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      message_content_type: ["text", "file", "system"],
+      room_member_role: ["admin", "member"],
+      verification_method: ["qr", "sas"],
+    },
   },
 } as const

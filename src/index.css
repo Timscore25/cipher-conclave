@@ -2,39 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* PGPRooms Design System - Secure, Professional, Trust-Inspiring Colors */
 
 @layer base {
   :root {
+    /* Base colors - Clean and professional */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 220 15% 12%;
 
+    /* Card and surfaces */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 15% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 220 15% 12%;
 
-    --primary: 222.2 47.4% 11.2%;
+    /* Primary - Security blue for trust */
+    --primary: 217 91% 30%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Subtle gray-blue */
+    --secondary: 217 19% 95%;
+    --secondary-foreground: 217 91% 30%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted colors */
+    --muted: 217 19% 95%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Verification green */
+    --accent: 142 76% 36%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    /* Destructive - Warning red */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders and inputs */
+    --border: 217 32% 91%;
+    --input: 217 32% 91%;
+    --ring: 217 91% 30%;
+
+    /* Crypto-specific colors */
+    --crypto-verified: 142 76% 36%;
+    --crypto-unverified: 43 96% 56%;
+    --crypto-error: 0 84% 60%;
+    --crypto-warning: 38 92% 50%;
+
+    /* Gradients for premium feel */
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 30%), hsl(217 91% 40%));
+    --gradient-security: linear-gradient(135deg, hsl(217 91% 30%), hsl(142 76% 36%));
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(217 19% 98%));
 
     --radius: 0.5rem;
 
@@ -56,41 +73,61 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    /* Dark theme - Security focused */
+    --background: 220 27% 8%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 220 27% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 220 27% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Primary remains security blue but lighter */
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 27% 8%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    /* Secondary - Dark surfaces */
+    --secondary: 220 27% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    /* Muted colors for dark theme */
+    --muted: 220 27% 14%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    /* Accent - Brighter verification green for dark */
+    --accent: 142 76% 50%;
+    --accent-foreground: 220 27% 8%;
 
-    --destructive: 0 62.8% 30.6%;
+    /* Destructive */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Borders and inputs */
+    --border: 220 27% 18%;
+    --input: 220 27% 18%;
+    --ring: 217 91% 60%;
+
+    /* Dark theme crypto colors */
+    --crypto-verified: 142 76% 50%;
+    --crypto-unverified: 43 96% 70%;
+    --crypto-error: 0 84% 60%;
+    --crypto-warning: 38 92% 65%;
+
+    /* Dark gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(217 91% 70%));
+    --gradient-security: linear-gradient(135deg, hsl(217 91% 60%), hsl(142 76% 50%));
+    --gradient-surface: linear-gradient(180deg, hsl(220 27% 8%), hsl(220 27% 12%));
+
+    /* Sidebar colors for dark theme */
+    --sidebar-background: 220 27% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 220 27% 8%;
+    --sidebar-accent: 220 27% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 27% 18%;
+    --sidebar-ring: 217 91% 60%;
   }
 }
 
