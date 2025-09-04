@@ -1,13 +1,19 @@
 import { useEffect, useState, useRef } from 'react';
-import { Send, Paperclip, Shield, AlertTriangle, Download, FileText } from 'lucide-react';
+import { Send, Paperclip, Shield, AlertTriangle, Download, FileText, UserPlus, QrCode, Camera, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useRoomsStore } from '@/lib/stores/rooms-store';
 import { useMessagesStore, type Message } from '@/lib/stores/messages-store';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
+import { useVerificationStore } from '@/lib/stores/verification-store';
 import { useToast } from '@/hooks/use-toast';
+import { ShowQRDialog } from '@/components/verification/ShowQRDialog';
+import { ScanQRDialog } from '@/components/verification/ScanQRDialog';
+import { InviteDialog } from '@/components/invitations/InviteDialog';
+import { ExportDialog } from '@/components/export/ExportDialog';
 
 export default function ChatView() {
   const [message, setMessage] = useState('');
@@ -29,6 +35,7 @@ export default function ChatView() {
   } = useMessagesStore();
 
   const { currentDeviceFingerprint } = useCryptoStore();
+  const { isFingerrintVerified, loadVerifications } = useVerificationStore();
   const { toast } = useToast();
 
   const currentRoom = rooms.find(r => r.id === currentRoomId);
@@ -45,6 +52,11 @@ export default function ChatView() {
       unsubscribeFromRoom();
     };
   }, [currentRoomId, loadMessages, subscribeToRoom, unsubscribeFromRoom]);
+
+  // Load verifications on mount
+  useEffect(() => {
+    loadVerifications();
+  }, [loadVerifications]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -96,6 +108,7 @@ export default function ChatView() {
   const renderMessage = (msg: Message) => {
     const hasError = !!msg.decryptionError;
     const isVerified = msg.isVerified && !hasError;
+    const isSignerVerified = isFingerrintVerified(msg.signer_fpr);
 
     return (
       <div key={msg.id} className="mb-4 p-3 rounded-lg bg-card">
@@ -110,6 +123,12 @@ export default function ChatView() {
                 Verified
               </Badge>
             )}
+            {isSignerVerified && (
+              <Badge variant="default" className="text-xs">
+                <Shield className="w-3 h-3 mr-1" />
+                Trusted
+              </Badge>
+            )}
             {hasError && (
               <Badge variant="destructive" className="text-xs">
                 <AlertTriangle className="w-3 h-3 mr-1" />
@@ -117,9 +136,28 @@ export default function ChatView() {
               </Badge>
             )}
           </div>
-          <span className="text-xs text-muted-foreground">
-            {formatTime(msg.created_at)}
-          </span>
+          <div className="flex items-center space-x-2">
+            <span className="text-xs text-muted-foreground">
+              {formatTime(msg.created_at)}
+            </span>
+            {!hasError && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+                    <MoreVertical className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <ExportDialog message={msg}>
+                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Export Message
+                    </DropdownMenuItem>
+                  </ExportDialog>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
 
         {hasError ? (
@@ -186,6 +224,28 @@ export default function ChatView() {
           <p className="text-sm text-muted-foreground">
             End-to-end encrypted chat
           </p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <ShowQRDialog>
+            <Button size="sm" variant="outline">
+              <QrCode className="w-4 h-4 mr-2" />
+              Show QR
+            </Button>
+          </ShowQRDialog>
+          
+          <ScanQRDialog>
+            <Button size="sm" variant="outline">
+              <Camera className="w-4 h-4 mr-2" />
+              Scan QR
+            </Button>
+          </ScanQRDialog>
+          
+          <InviteDialog roomId={currentRoomId} roomName={currentRoom?.name || 'Room'}>
+            <Button size="sm" variant="default">
+              <UserPlus className="w-4 h-4 mr-2" />
+              Invite
+            </Button>
+          </InviteDialog>
         </div>
       </div>
 

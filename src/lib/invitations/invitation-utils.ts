@@ -21,24 +21,29 @@ const INVITATION_TTL_HOURS = 24;
 export async function createRoomInvitation(roomId: string, maxUses: number = 10): Promise<string> {
   const expiresAt = new Date(Date.now() + INVITATION_TTL_HOURS * 60 * 60 * 1000);
   
-  // Use rpc function since types aren't updated yet
-  const { data, error } = await supabase.rpc('create_room_invitation', {
-    p_room_id: roomId,
-    p_expires_at: expiresAt.toISOString(),
-    p_uses_remaining: maxUses,
-  });
+  try {
+    // Use rpc function with type assertion
+    const { data, error } = await (supabase as any).rpc('create_room_invitation', {
+      p_room_id: roomId,
+      p_expires_at: expiresAt.toISOString(),
+      p_uses_remaining: maxUses,
+    });
 
-  if (error) throw error;
+    if (error) throw error;
 
-  // Return invitation link
-  const baseUrl = window.location.origin;
-  return `${baseUrl}/invite/${data}`;
+    // Return invitation link
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/invite/${data}`;
+  } catch (error) {
+    console.error('Failed to create invitation:', error);
+    throw error;
+  }
 }
 
 export async function getInvitationInfo(invitationId: string): Promise<InvitationInfo | null> {
   try {
     // Use rpc function to get invitation info
-    const { data, error } = await supabase.rpc('get_invitation_info', {
+    const { data, error } = await (supabase as any).rpc('get_invitation_info', {
       p_invitation_id: invitationId,
     });
 
@@ -59,7 +64,7 @@ export async function getInvitationInfo(invitationId: string): Promise<Invitatio
 export async function acceptInvitation(invitationId: string, deviceFingerprint: string): Promise<string> {
   try {
     // Use rpc function to accept invitation
-    const { data, error } = await supabase.rpc('accept_invitation', {
+    const { data, error } = await (supabase as any).rpc('accept_invitation', {
       p_invitation_id: invitationId,
       p_device_fingerprint: deviceFingerprint,
     });

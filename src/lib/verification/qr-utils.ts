@@ -64,7 +64,7 @@ export function parseQRPayload(qrData: string): DeviceQRPayload | null {
   }
 }
 
-export function computeShortAuthString(fpr1: string, fpr2: string): string {
+export function computeShortAuthString(fpr1: string, fpr2: string): Promise<string> {
   // Create deterministic ordering
   const [first, second] = [fpr1, fpr2].sort();
   const combined = first + second;

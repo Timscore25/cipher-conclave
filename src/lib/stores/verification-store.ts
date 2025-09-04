@@ -16,7 +16,7 @@ interface VerificationState {
   // Actions
   loadVerifications: () => Promise<void>;
   isFingerrintVerified: (fingerprint: string) => boolean;
-  addVerification: (targetFpr: string, method: 'qr_scan' | 'manual') => Promise<void>;
+  addVerification: (targetFpr: string, method: 'qr' | 'sas') => Promise<void>;
   clearError: () => void;
 }
 
