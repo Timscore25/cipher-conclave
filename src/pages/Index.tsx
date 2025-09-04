@@ -1,5 +1,5 @@
 import AuthWrapper from '@/components/auth/AuthWrapper';
-import MainLayout from '@/components/chat/MainLayout';
+import { MainLayout } from '@/components/chat/MainLayout';
 
 const Index = () => {
   return (

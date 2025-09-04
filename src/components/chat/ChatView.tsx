@@ -1,218 +1,292 @@
-import { useState, useRef, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
+import { useEffect, useState, useRef } from 'react';
+import { Send, Paperclip, Shield, AlertTriangle, Download, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Hash, Send, Paperclip, Shield, AlertTriangle, CheckCircle, Users, Settings } from 'lucide-react';
-import { Virtuoso } from 'react-virtuoso';
+import { Badge } from '@/components/ui/badge';
+import { useRoomsStore } from '@/lib/stores/rooms-store';
+import { useMessagesStore, type Message } from '@/lib/stores/messages-store';
+import { useCryptoStore } from '@/lib/stores/crypto-store';
+import { useToast } from '@/hooks/use-toast';
 
-interface Message {
-  id: string;
-  authorName: string;
-  authorFingerprint: string;
-  content: string;
-  timestamp: Date;
-  verified: boolean;
-  encrypted: boolean;
-  attachments?: Array<{
-    name: string;
-    size: number;
-    mimeType: string;
-  }>;
-}
-
-interface ChatViewProps {
-  roomId: string;
-}
-
-// Mock data for development
-const mockMessages: Message[] = [
-  {
-    id: '1',
-    authorName: 'Alice',
-    authorFingerprint: 'ABC123',
-    content: 'Welcome to PGPRooms! This message is end-to-end encrypted.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-    verified: true,
-    encrypted: true,
-  },
-  {
-    id: '2',
-    authorName: 'Bob',
-    authorFingerprint: 'DEF456',
-    content: 'Thanks Alice! The encryption verification is working perfectly.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    verified: true,
-    encrypted: true,
-  },
-  {
-    id: '3',
-    authorName: 'Charlie',
-    authorFingerprint: 'GHI789',
-    content: 'I can confirm all keys are properly verified on my end as well.',
-    timestamp: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-    verified: false,
-    encrypted: true,
-  },
-];
-
-export default function ChatView({ roomId }: ChatViewProps) {
-  const [messages] = useState<Message[]>(mockMessages);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function ChatView() {
+  const [message, setMessage] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
+  const { currentRoomId, rooms } = useRoomsStore();
+  const {
+    messagesByRoom,
+    isLoading,
+    error,
+    loadMessages,
+    sendMessage,
+    subscribeToRoom,
+    unsubscribeFromRoom,
+    clearError
+  } = useMessagesStore();
 
-    setLoading(true);
+  const { currentDeviceFingerprint } = useCryptoStore();
+  const { toast } = useToast();
+
+  const currentRoom = rooms.find(r => r.id === currentRoomId);
+  const messages = currentRoomId ? messagesByRoom[currentRoomId] || [] : [];
+
+  // Load messages and subscribe when room changes
+  useEffect(() => {
+    if (currentRoomId) {
+      loadMessages(currentRoomId);
+      subscribeToRoom(currentRoomId);
+    }
     
-    // TODO: Implement message sending with encryption
-    console.log('Sending message:', newMessage);
-    
-    setNewMessage('');
-    setLoading(false);
+    return () => {
+      unsubscribeFromRoom();
+    };
+  }, [currentRoomId, loadMessages, subscribeToRoom, unsubscribeFromRoom]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if ((!message.trim() && attachments.length === 0) || !currentRoomId) return;
+
+    setIsSending(true);
+    try {
+      await sendMessage(currentRoomId, message.trim(), attachments.length > 0 ? attachments : undefined);
+      setMessage('');
+      setAttachments([]);
+      toast({
+        title: "Message sent",
+        description: "Your message has been encrypted and sent.",
+      });
+    } catch (error) {
+      toast({
+        title: "Failed to send message",
+        description: "An error occurred while sending your message.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
-  const handleFileSelect = () => {
-    fileInputRef.current?.click();
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    setAttachments(prev => [...prev, ...files]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-
-    // TODO: Implement file attachment encryption
-    console.log('Selected files:', files);
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  const formatTimestamp = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
-    }).format(date);
+    });
   };
 
-  const MessageItem = ({ message }: { message: Message }) => (
-    <Card className="p-4 mb-3">
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center space-x-2">
-          <span className="font-medium text-sm">{message.authorName}</span>
-          <div className="flex items-center space-x-1">
-            {message.verified ? (
-              <CheckCircle className="w-3 h-3 text-accent" />
-            ) : (
-              <AlertTriangle className="w-3 h-3 text-yellow-500" />
+  const renderMessage = (msg: Message) => {
+    const hasError = !!msg.decryptionError;
+    const isVerified = msg.isVerified && !hasError;
+
+    return (
+      <div key={msg.id} className="mb-4 p-3 rounded-lg bg-card">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center space-x-2">
+            <span className="font-medium text-sm">
+              {msg.devices?.label || 'Unknown Device'}
+            </span>
+            {isVerified && (
+              <Badge variant="secondary" className="text-xs">
+                <Shield className="w-3 h-3 mr-1" />
+                Verified
+              </Badge>
             )}
-            {message.encrypted && (
-              <Shield className="w-3 h-3 text-primary" />
+            {hasError && (
+              <Badge variant="destructive" className="text-xs">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Decrypt Error
+              </Badge>
             )}
           </div>
+          <span className="text-xs text-muted-foreground">
+            {formatTime(msg.created_at)}
+          </span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {formatTimestamp(message.timestamp)}
-        </span>
+
+        {hasError ? (
+          <div className="text-sm text-destructive">
+            {msg.decryptionError}
+          </div>
+        ) : (
+          <>
+            {msg.decryptedText && (
+              <div className="text-sm whitespace-pre-wrap break-words">
+                {msg.decryptedText}
+              </div>
+            )}
+            
+            {msg.decryptedAttachments && msg.decryptedAttachments.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {msg.decryptedAttachments.map((attachment, index) => (
+                  <div key={index} className="flex items-center space-x-2 p-2 bg-accent rounded">
+                    <FileText className="w-4 h-4" />
+                    <span className="text-sm flex-1">{attachment.name}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        // Create download link for decrypted file
+                        const blob = new Blob([attachment.data], { type: attachment.mimeType });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = attachment.name;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
+    );
+  };
 
-      <p className="text-sm mb-2">{message.content}</p>
-
-      {message.attachments && message.attachments.length > 0 && (
-        <div className="space-y-2">
-          {message.attachments.map((attachment, index) => (
-            <div key={index} className="flex items-center space-x-2 p-2 bg-muted rounded text-xs">
-              <Paperclip className="w-3 h-3" />
-              <span>{attachment.name}</span>
-              <span className="text-muted-foreground">({Math.round(attachment.size / 1024)} KB)</span>
-            </div>
-          ))}
+  if (!currentRoomId) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <div className="text-center">
+          <p className="text-lg mb-2">No room selected</p>
+          <p className="text-sm">Select a room from the sidebar to start chatting</p>
         </div>
-      )}
-
-      <div className="flex items-center space-x-2 mt-2 text-xs text-muted-foreground">
-        <code className="bg-muted px-1 rounded">{message.authorFingerprint}</code>
-        <Badge variant="outline" className="text-xs">
-          {message.verified ? 'Verified' : 'Unverified'}
-        </Badge>
       </div>
-    </Card>
-  );
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-border/50 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Hash className="w-5 h-5 text-muted-foreground" />
-            <div>
-              <h2 className="font-semibold">Room #{roomId}</h2>
-              <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                <Users className="w-3 h-3" />
-                <span>3 members</span>
-                <Shield className="w-3 h-3 text-accent" />
-                <span>E2E encrypted</span>
-              </div>
-            </div>
-          </div>
-          
-          <Button variant="ghost" size="sm">
-            <Settings className="w-4 h-4" />
-          </Button>
+      <div className="flex items-center justify-between p-4 border-b">
+        <div>
+          <h2 className="text-lg font-semibold">{currentRoom?.name}</h2>
+          <p className="text-sm text-muted-foreground">
+            End-to-end encrypted chat
+          </p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-4">
-            {messages.map((message) => (
-              <MessageItem key={message.id} message={message} />
+      <ScrollArea className="flex-1 p-4">
+        <div className="space-y-4">
+          {isLoading && messages.length === 0 ? (
+            <div className="text-center text-muted-foreground">
+              Loading messages...
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center text-muted-foreground">
+              <p>No messages yet</p>
+              <p className="text-sm">Send the first message to start the conversation</p>
+            </div>
+          ) : (
+            messages.map(renderMessage)
+          )}
+          
+          {error && (
+            <div className="text-center text-destructive text-sm">
+              {error}
+            </div>
+          )}
+        </div>
+        <div ref={messagesEndRef} />
+      </ScrollArea>
+
+      {/* Message Composer */}
+      <div className="p-4 border-t">
+        {attachments.length > 0 && (
+          <div className="mb-3 space-y-2">
+            {attachments.map((file, index) => (
+              <div key={index} className="flex items-center space-x-2 p-2 bg-accent rounded text-sm">
+                <FileText className="w-4 h-4" />
+                <span className="flex-1">{file.name}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => removeAttachment(index)}
+                >
+                  ×
+                </Button>
+              </div>
             ))}
           </div>
-        </ScrollArea>
-      </div>
+        )}
 
-      {/* Message Input */}
-      <div className="border-t border-border/50 p-4">
-        <form onSubmit={handleSendMessage} className="flex space-x-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleFileSelect}
-            disabled={loading}
-          >
-            <Paperclip className="w-4 h-4" />
-          </Button>
+        <div className="flex space-x-2">
+          <div className="flex-1 space-y-2">
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="resize-none"
+              rows={1}
+              disabled={!currentDeviceFingerprint}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!isSending) {
+                    handleSendMessage();
+                  }
+                }
+              }}
+            />
+          </div>
           
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type your encrypted message..."
-            disabled={loading}
-            className="flex-1"
-          />
-          
-          <Button type="submit" disabled={loading || !newMessage.trim()}>
-            <Send className="w-4 h-4" />
-          </Button>
-          
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </form>
-        
-        <p className="text-xs text-muted-foreground mt-2 flex items-center space-x-1">
-          <Shield className="w-3 h-3" />
-          <span>Messages are end-to-end encrypted and signed</span>
-        </p>
+          <div className="flex flex-col space-y-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!currentDeviceFingerprint}
+            >
+              <Paperclip className="w-4 h-4" />
+            </Button>
+            
+            <Button
+              onClick={handleSendMessage}
+              disabled={(!message.trim() && attachments.length === 0) || isSending || !currentDeviceFingerprint}
+              size="sm"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          multiple
+          className="hidden"
+        />
+
+        {!currentDeviceFingerprint && (
+          <div className="mt-2 text-xs text-muted-foreground text-center">
+            Please unlock a device to send messages
+          </div>
+        )}
       </div>
     </div>
   );

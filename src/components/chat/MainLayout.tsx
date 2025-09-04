@@ -3,15 +3,14 @@ import { Sidebar, SidebarContent, SidebarHeader, SidebarProvider } from '@/compo
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
-import RoomsList from './RoomsList';
+import { RoomsList } from './RoomsList';
 import ChatView from './ChatView';
 import UnlockPrompt from './UnlockPrompt';
 import { LogOut, Lock, Shield } from 'lucide-react';
 
-export default function MainLayout() {
+export function MainLayout() {
   const { signOut, user } = useAuthStore();
   const { currentDeviceFingerprint, unlockedKeys } = useCryptoStore();
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
   const isDeviceUnlocked = currentDeviceFingerprint && unlockedKeys.includes(currentDeviceFingerprint);
 
@@ -52,10 +51,7 @@ export default function MainLayout() {
           
           <SidebarContent>
             {isDeviceUnlocked ? (
-              <RoomsList 
-                selectedRoomId={selectedRoomId}
-                onSelectRoom={setSelectedRoomId}
-              />
+              <RoomsList />
             ) : (
               <div className="p-4">
                 <div className="text-center space-y-3">
@@ -73,22 +69,8 @@ export default function MainLayout() {
         <main className="flex-1 flex flex-col">
           {!isDeviceUnlocked ? (
             <UnlockPrompt />
-          ) : selectedRoomId ? (
-            <ChatView roomId={selectedRoomId} />
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center space-y-4 max-w-md">
-                <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto">
-                  <Shield className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold">Welcome to PGPRooms</h3>
-                  <p className="text-muted-foreground">
-                    Select a room to start secure messaging, or create a new room to begin.
-                  </p>
-                </div>
-              </div>
-            </div>
+            <ChatView />
           )}
         </main>
       </div>
