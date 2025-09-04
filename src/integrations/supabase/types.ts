@@ -290,7 +290,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      accept_invitation: {
+        Args: { p_device_fingerprint: string; p_invitation_id: string }
+        Returns: string
+      }
+      create_room_invitation: {
+        Args: {
+          p_expires_at: string
+          p_room_id: string
+          p_uses_remaining?: number
+        }
+        Returns: string
+      }
+      get_invitation_info: {
+        Args: { p_invitation_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       message_content_type: "text" | "file" | "system"
