@@ -164,6 +164,41 @@ export type Database = {
           },
         ]
       }
+      room_invitations: {
+        Row: {
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          room_id: string
+          uses_remaining: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          expires_at: string
+          id?: string
+          room_id: string
+          uses_remaining?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          room_id?: string
+          uses_remaining?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_invitations_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_members: {
         Row: {
           added_at: string

@@ -144,7 +144,7 @@ export function ScanQRDialog({ children, onVerificationComplete }: ScanQRDialogP
         .insert({
           verifier_device_id: currentDeviceFingerprint, // Note: This should be device ID, not fingerprint
           target_fpr: scannedPayload.fpr,
-          method: 'qr_scan',
+          method: 'qr',
         });
 
       if (error) {

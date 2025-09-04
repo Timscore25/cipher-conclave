@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface VerificationRecord {
   target_fpr: string;
-  method: 'qr_scan' | 'manual';
+  method: 'qr' | 'sas';
   verified_at: string;
   verifier_device_id: string;
 }
@@ -47,7 +47,7 @@ export const useVerificationStore = create<VerificationState>((set, get) => ({
     return verifications.some(v => v.target_fpr === fingerprint);
   },
 
-  addVerification: async (targetFpr: string, method: 'qr_scan' | 'manual') => {
+  addVerification: async (targetFpr: string, method: 'qr' | 'sas') => {
     set({ isLoading: true, error: null });
     try {
       // Get current user's device ID
