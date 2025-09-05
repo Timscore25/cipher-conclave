@@ -388,50 +388,65 @@ export class PGPProvider implements CryptoProvider {
       throw new Error('Passphrase is required for wrapping');
     }
 
-    // Generate salt and convert passphrase to bytes for KDF
-    const salt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
-    const passphraseBytes = new TextEncoder().encode(passphrase);
-    
-    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
-      console.log('[PGP] Wrapping private key:', { 
-        saltLength: salt.length,
-        passphraseByteLength: passphraseBytes.length,
-        privateKeyLength: armoredPrivateKey.length
-      });
-    }
-
-    // Derive key using Argon2id
-    const key = sodium.crypto_pwhash(
-      32,
-      passphraseBytes,
-      salt,
-      sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_ALG_ARGON2ID
+    const useSodium = !!(
+      (sodium as any).crypto_pwhash &&
+      (sodium as any).crypto_pwhash_SALTBYTES &&
+      (sodium as any).crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
     );
 
-    // Encrypt with XChaCha20-Poly1305
-    const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-    const privateKeyBytes = new TextEncoder().encode(armoredPrivateKey);
-    const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-      privateKeyBytes,
-      null,
-      null,
-      nonce,
-      key
-    );
+    try {
+      if (!useSodium) throw new Error('Sodium not available');
 
-    // Combine salt + nonce + ciphertext
-    const result = new Uint8Array([...salt, ...nonce, ...ciphertext]);
-    
-    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
-      console.log('[PGP] Private key wrapped:', { 
-        wrappedSize: result.length,
-        expectedMinSize: salt.length + nonce.length + privateKeyBytes.length + 16 // +16 for poly1305 tag
-      });
+      // Generate salt and convert passphrase to bytes for KDF
+      const salt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
+      const passphraseBytes = new TextEncoder().encode(passphrase);
+      
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[PGP] Wrapping private key (sodium):', { 
+          saltLength: salt.length,
+          passphraseByteLength: passphraseBytes.length,
+          privateKeyLength: armoredPrivateKey.length
+        });
+      }
+
+      // Derive key using Argon2id
+      const key = sodium.crypto_pwhash(
+        32,
+        passphraseBytes,
+        salt,
+        sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        sodium.crypto_pwhash_ALG_ARGON2ID
+      );
+
+      // Encrypt with XChaCha20-Poly1305
+      const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+      const privateKeyBytes = new TextEncoder().encode(armoredPrivateKey);
+      const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+        privateKeyBytes,
+        null,
+        null,
+        nonce,
+        key
+      );
+
+      // Combine salt + nonce + ciphertext
+      const result = new Uint8Array([...salt, ...nonce, ...ciphertext]);
+      
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[PGP] Private key wrapped (sodium):', { 
+          wrappedSize: result.length,
+          expectedMinSize: salt.length + nonce.length + privateKeyBytes.length + 16
+        });
+      }
+
+      return result;
+    } catch (e) {
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.warn('[PGP] Sodium wrap failed, falling back to WebCrypto PBKDF2/AES-GCM', e);
+      }
+      return this.webWrapPrivateKey(armoredPrivateKey, passphrase);
     }
-
-    return result;
   }
 
   private async unwrapPrivateKey(
@@ -448,63 +463,148 @@ export class PGPProvider implements CryptoProvider {
       throw new Error('Passphrase is required for unwrapping');
     }
 
+    // Check for WebCrypto-wrapped format (magic prefix "WRP0")
+    const magic = new TextEncoder().encode('WRP0');
+    const hasMagicPrefix = wrapped.length > magic.length && magic.every((b, i) => wrapped[i] === b);
+    if (hasMagicPrefix) {
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[PGP] Detected WebCrypto-wrapped key format');
+      }
+      return this.webUnwrapPrivateKey(wrapped, passphrase);
+    }
+
     const expectedMinSize = sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES + 16;
     if (wrapped.length < expectedMinSize) {
       throw new Error(`Wrapped key data is too small (${wrapped.length} bytes, expected at least ${expectedMinSize})`);
     }
 
-    // Extract components
-    const salt = wrapped.slice(0, sodium.crypto_pwhash_SALTBYTES);
-    const nonce = wrapped.slice(
-      sodium.crypto_pwhash_SALTBYTES,
-      sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+    try {
+      // Extract components (sodium format)
+      const salt = wrapped.slice(0, sodium.crypto_pwhash_SALTBYTES);
+      const nonce = wrapped.slice(
+        sodium.crypto_pwhash_SALTBYTES,
+        sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+      );
+      const ciphertext = wrapped.slice(
+        sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+      );
+
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[PGP] Unwrapping private key (sodium):', { 
+          wrappedSize: wrapped.length,
+          saltLength: salt.length,
+          nonceLength: nonce.length,
+          ciphertextLength: ciphertext.length,
+          passphraseLength: passphrase.length
+        });
+      }
+
+      // Convert passphrase to bytes for KDF
+      const passphraseBytes = new TextEncoder().encode(passphrase);
+
+      // Derive key using Argon2id
+      const key = sodium.crypto_pwhash(
+        32,
+        passphraseBytes,
+        salt,
+        sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        sodium.crypto_pwhash_ALG_ARGON2ID
+      );
+
+      // Decrypt
+      const decrypted = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+        null,
+        ciphertext,
+        null,
+        nonce,
+        key
+      );
+
+      if (!decrypted) {
+        throw new Error('Failed to decrypt private key - incorrect passphrase or corrupted data');
+      }
+
+      const result = new TextDecoder().decode(decrypted);
+      
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[PGP] Private key unwrapped successfully (sodium):', { 
+          decryptedLength: result.length 
+        });
+      }
+
+      return result;
+    } catch (e) {
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.warn('[PGP] Sodium unwrap failed, attempting WebCrypto fallback', e);
+      }
+      // Fallback only works if magic prefix is present; otherwise rethrow
+      return this.webUnwrapPrivateKey(wrapped, passphrase);
+    }
+  }
+
+  // --- WebCrypto fallback (PBKDF2 + AES-GCM) ---
+  private async webWrapPrivateKey(armoredPrivateKey: string, passphrase: string): Promise<Uint8Array> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(armoredPrivateKey);
+
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+
+    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt']
     );
-    const ciphertext = wrapped.slice(
-      sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
-    );
+
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+
+    // Prefix to identify WebCrypto-wrapped format: "WRP0"
+    const prefix = encoder.encode('WRP0');
+    const result = new Uint8Array(prefix.length + salt.length + iv.length + (ciphertext as ArrayBuffer).byteLength);
+    result.set(prefix, 0);
+    result.set(salt, prefix.length);
+    result.set(iv, prefix.length + salt.length);
+    result.set(new Uint8Array(ciphertext as ArrayBuffer), prefix.length + salt.length + iv.length);
 
     if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
-      console.log('[PGP] Unwrapping private key:', { 
-        wrappedSize: wrapped.length,
-        saltLength: salt.length,
-        nonceLength: nonce.length,
-        ciphertextLength: ciphertext.length,
-        passphraseLength: passphrase.length
-      });
+      console.log('[PGP] Private key wrapped (WebCrypto):', { wrappedSize: result.length });
     }
 
-    // Convert passphrase to bytes for KDF
-    const passphraseBytes = new TextEncoder().encode(passphrase);
+    return result;
+  }
 
-    // Derive key using Argon2id
-    const key = sodium.crypto_pwhash(
-      32,
-      passphraseBytes,
-      salt,
-      sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-      sodium.crypto_pwhash_ALG_ARGON2ID
-    );
+  private async webUnwrapPrivateKey(wrapped: Uint8Array, passphrase: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
 
-    // Decrypt
-    const decrypted = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-      null,
-      ciphertext,
-      null,
-      nonce,
-      key
-    );
-
-    if (!decrypted) {
-      throw new Error('Failed to decrypt private key - incorrect passphrase or corrupted data');
+    const prefix = encoder.encode('WRP0');
+    if (!(wrapped.length > prefix.length && prefix.every((b, i) => wrapped[i] === b))) {
+      throw new Error('Invalid wrapped key format');
     }
 
-    const result = new TextDecoder().decode(decrypted);
-    
+    const salt = wrapped.slice(prefix.length, prefix.length + 16);
+    const iv = wrapped.slice(prefix.length + 16, prefix.length + 28);
+    const ciphertext = wrapped.slice(prefix.length + 28);
+
+    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+
+    const result = decoder.decode(new Uint8Array(decrypted));
+
     if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
-      console.log('[PGP] Private key unwrapped successfully:', { 
-        decryptedLength: result.length 
-      });
+      console.log('[PGP] Private key unwrapped (WebCrypto)');
     }
 
     return result;
