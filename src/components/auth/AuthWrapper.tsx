@@ -25,16 +25,23 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     };
   }, [initAuthListener]);
 
-// Initialize crypto after auth is ready
-useEffect(() => {
-  logAuth('AuthWrapper decision', { initialized, hasSession: !!session, hasUser: !!user, cryptoInitialized, hasDevice });
-  if (initialized && user) {
-    initializeCrypto();
-  }
-}, [initialized, user, session, cryptoInitialized, hasDevice, initializeCrypto]);
+  // Initialize crypto after auth is ready
+  useEffect(() => {
+    logAuth('AuthWrapper decision', { 
+      initialized, 
+      hasSession: !!session, 
+      hasUser: !!user, 
+      cryptoInitialized, 
+      hasDevice 
+    });
+    if (initialized && user) {
+      initializeCrypto();
+    }
+  }, [initialized, user, session, cryptoInitialized, hasDevice, initializeCrypto]);
 
   // Show loading while initializing
   if (loading || !initialized) {
+    logAuth('AuthWrapper: showing loading state', { loading, initialized });
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-4 w-full max-w-md">
@@ -54,6 +61,7 @@ useEffect(() => {
 
   // Wait for crypto initialization
   if (!cryptoInitialized) {
+    logAuth('AuthWrapper: waiting for crypto initialization');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-4 w-full max-w-md">
@@ -67,10 +75,11 @@ useEffect(() => {
 
   // User authenticated but no crypto device
   if (!hasDevice) {
+    logAuth('AuthWrapper: no crypto device, showing onboarding');
     return <OnboardingFlow />;
   }
 
   // All good - show main app
   logAuth('AuthWrapper: rendering main app', { user: user.email, hasSession: !!session });
-  return children;
+  return <>{children}</>;
 }

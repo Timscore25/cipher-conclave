@@ -6,12 +6,22 @@ import { attachAuthProbes } from '@/lib/auth/debug';
 const SUPABASE_URL = "https://ddttwqzfbzjntxieeusd.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkdHR3cXpmYnpqbnR4aWVldXNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwMjc5MDcsImV4cCI6MjA3MjYwMzkwN30.GYw7o2zt33NmJwLKnRf4fS3GnYMTJPeQFncbaepHofs";
 
+// Debug logging for dev
+const DEBUG_AUTH = import.meta.env.VITE_DEBUG_AUTH === 'true';
+if (DEBUG_AUTH) {
+  console.log('[SUPABASE CLIENT]', {
+    url: new URL(SUPABASE_URL).host,
+    anonKey: SUPABASE_PUBLISHABLE_KEY.slice(0, 6) + '...',
+    message: 'Email provider must be ENABLED in Supabase Dashboard'
+  });
+}
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: window.localStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,

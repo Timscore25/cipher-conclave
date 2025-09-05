@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { Lock, Shield, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { logAuth } from '@/lib/auth/debug';
+import { supabase } from '@/integrations/supabase/client';
 import AuthFix from './AuthFix';
 
 export default function AuthFlow() {
@@ -17,6 +18,7 @@ export default function AuthFlow() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showAuthFix, setShowAuthFix] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   const [signInForm, setSignInForm] = useState({
     email: '',
@@ -30,53 +32,118 @@ export default function AuthFlow() {
     displayName: '',
   });
 
-const handleSignIn = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError(null);
-  setSuccess(null);
-
-  const { error } = await signIn(signInForm.email, signInForm.password);
-  if (error) {
-    logAuth('signIn error', error);
-    
-    // Check for email provider disabled error
-    if (error.message.includes('Email authentication is disabled') || error.message.includes('email_provider_disabled')) {
-      setShowAuthFix(true);
-      return;
-    }
-    
-    setError(error.message);
-    toast({ title: 'Sign-in failed', description: error.message });
-    return;
-  }
-  logAuth('signIn OK', { email: signInForm.email });
-};
-
+  // Direct handlers for explicit error surfacing
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setIsLoading(true);
 
     if (signUpForm.password !== signUpForm.confirmPassword) {
       setError('Passwords do not match');
+      setIsLoading(false);
       return;
     }
 
     if (signUpForm.password.length < 8) {
       setError('Password must be at least 8 characters long');
+      setIsLoading(false);
       return;
     }
 
-    const { error, emailConfirmationRequired } = await signUp(
-      signUpForm.email, 
-      signUpForm.password, 
-      signUpForm.displayName
-    );
-    
-    if (error) {
-      setError(error.message);
-    } else if (emailConfirmationRequired) {
-      setSuccess('Account created! Please check your email and click the confirmation link to complete registration.');
+    try {
+      console.log('[SIGNUP] Attempting signup for:', signUpForm.email);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: signUpForm.email,
+        password: signUpForm.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            display_name: signUpForm.displayName,
+          },
+        },
+      });
+
+      if (error) {
+        console.error('[SIGNUP] Error:', error);
+        
+        if (error.message.includes('email_provider_disabled') || error.message.includes('Email logins are disabled')) {
+          setShowAuthFix(true);
+          setIsLoading(false);
+          return;
+        }
+        
+        setError(error.message);
+        toast({ title: 'Sign-up failed', description: error.message, variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[SIGNUP OK]', data.user?.id, data.user?.email);
+      
+      if (data.user && !data.session) {
+        // Email confirmation required
+        setSuccess('Account created! Please check your email and click the confirmation link to complete registration.');
+      } else if (data.session) {
+        // Signed up and signed in immediately
+        setSuccess('Account created and signed in successfully!');
+      }
+      
+      setSignUpForm({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        displayName: '',
+      });
+      
+    } catch (err) {
+      console.error('[SIGNUP] Unexpected error:', err);
+      setError('An unexpected error occurred during sign-up');
+      toast({ title: 'Sign-up failed', description: 'An unexpected error occurred', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
+
+    try {
+      console.log('[SIGNIN] Attempting signin for:', signInForm.email);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: signInForm.email,
+        password: signInForm.password,
+      });
+
+      if (error) {
+        console.error('[SIGNIN] Error:', error);
+        
+        if (error.message.includes('email_provider_disabled') || error.message.includes('Email logins are disabled')) {
+          setShowAuthFix(true);
+          setIsLoading(false);
+          return;
+        }
+        
+        setError(error.message);
+        toast({ title: 'Sign-in failed', description: error.message, variant: 'destructive' });
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[SIGNIN OK]', data.user?.id, data.user?.email);
+      setSignInForm({ email: '', password: '' });
+      
+    } catch (err) {
+      console.error('[SIGNIN] Unexpected error:', err);
+      setError('An unexpected error occurred during sign-in');
+      toast({ title: 'Sign-in failed', description: 'An unexpected error occurred', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -204,8 +271,8 @@ const handleSignIn = async (e: React.FormEvent) => {
                     />
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? 'Signing In...' : 'Sign In'}
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? 'Signing In...' : 'Sign In'}
                   </Button>
                 </form>
               </TabsContent>
@@ -266,8 +333,8 @@ const handleSignIn = async (e: React.FormEvent) => {
                     />
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? 'Creating Account...' : 'Create Account'}
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? 'Creating Account...' : 'Create Account'}
                   </Button>
                 </form>
               </TabsContent>
