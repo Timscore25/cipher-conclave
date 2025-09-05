@@ -11,3 +11,9 @@ verify_jwt = true
 
 [functions.attachments-secure]
 verify_jwt = true
+
+[functions.mls-handshake]
+verify_jwt = true
+
+[functions.mls-app]
+verify_jwt = true

@@ -529,6 +529,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      cleanup_expired_key_packages: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       create_room_invite: {
         Args: { p_expires_at: string; p_max_uses?: number; p_room_id: string }
         Returns: string
