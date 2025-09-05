@@ -56,7 +56,13 @@ export const useMLSStore = create<MLSState>((set, get) => ({
     
     try {
       const cryptoStore = useCryptoStore.getState();
-      const unlockedKey = cryptoStore.getUnlockedKey();
+      const currentFingerprint = cryptoStore.currentDeviceFingerprint;
+      
+      if (!currentFingerprint) {
+        throw new Error('No current device available');
+      }
+      
+      const unlockedKey = cryptoStore.getUnlockedKey(currentFingerprint);
       
       if (!unlockedKey) {
         throw new Error('No unlocked device available');
@@ -114,7 +120,13 @@ export const useMLSStore = create<MLSState>((set, get) => ({
     
     try {
       const cryptoStore = useCryptoStore.getState();
-      const unlockedKey = cryptoStore.getUnlockedKey();
+      const currentFingerprint = cryptoStore.currentDeviceFingerprint;
+      
+      if (!currentFingerprint) {
+        throw new Error('No current device available');
+      }
+      
+      const unlockedKey = cryptoStore.getUnlockedKey(currentFingerprint);
       
       if (!unlockedKey) {
         throw new Error('No unlocked device available');
@@ -141,7 +153,13 @@ export const useMLSStore = create<MLSState>((set, get) => ({
     
     try {
       const cryptoStore = useCryptoStore.getState();
-      const unlockedKey = cryptoStore.getUnlockedKey();
+      const currentFingerprint = cryptoStore.currentDeviceFingerprint;
+      
+      if (!currentFingerprint) {
+        throw new Error('No current device available');
+      }
+      
+      const unlockedKey = cryptoStore.getUnlockedKey(currentFingerprint);
       
       if (!unlockedKey) {
         throw new Error('No unlocked device available');
@@ -154,11 +172,23 @@ export const useMLSStore = create<MLSState>((set, get) => ({
         throw new Error('Group not found');
       }
 
+      // Get device IDs from fingerprints first
+      const { data: devices, error: deviceError } = await supabase
+        .from('devices')
+        .select('id, fingerprint')
+        .in('fingerprint', deviceFingerprints);
+
+      if (deviceError || !devices) {
+        throw new Error('Failed to get device IDs');
+      }
+
+      const deviceIds = devices.map(d => d.id);
+
       // Get key packages for new members
       const { data: keyPackages, error: kpError } = await supabase
         .from('mls_key_packages')
-        .select('*')
-        .in('device_fingerprint', deviceFingerprints)
+        .select('*, devices!inner(fingerprint)')
+        .in('device_id', deviceIds)
         .is('used_at', null)
         .gt('expires_at', new Date().toISOString());
 
@@ -167,7 +197,7 @@ export const useMLSStore = create<MLSState>((set, get) => ({
       }
 
       const mlsKeyPackages = keyPackages.map(kp => ({
-        deviceFingerprint: kp.device_fingerprint,
+        deviceFingerprint: (kp.devices as any).fingerprint,
         keyPackage: new Uint8Array(Buffer.from(kp.key_package.slice(2), 'hex')),
         createdAt: new Date(kp.created_at).getTime(),
         expiresAt: new Date(kp.expires_at).getTime(),
@@ -222,7 +252,13 @@ export const useMLSStore = create<MLSState>((set, get) => ({
     
     try {
       const cryptoStore = useCryptoStore.getState();
-      const unlockedKey = cryptoStore.getUnlockedKey();
+      const currentFingerprint = cryptoStore.currentDeviceFingerprint;
+      
+      if (!currentFingerprint) {
+        throw new Error('No current device available');
+      }
+      
+      const unlockedKey = cryptoStore.getUnlockedKey(currentFingerprint);
       
       if (!unlockedKey) {
         throw new Error('No unlocked device available');
@@ -325,7 +361,12 @@ export const useMLSStore = create<MLSState>((set, get) => ({
       const decryptedMessages: MLSMessageDisplay[] = [];
 
       const cryptoStore = useCryptoStore.getState();
-      const unlockedKey = cryptoStore.getUnlockedKey();
+      const currentFingerprint = cryptoStore.currentDeviceFingerprint;
+      let unlockedKey = null;
+      
+      if (currentFingerprint) {
+        unlockedKey = cryptoStore.getUnlockedKey(currentFingerprint);
+      }
 
       for (const msg of messages) {
         try {
