@@ -46,8 +46,9 @@ useEffect(() => {
     );
   }
 
-  // User not authenticated
-  if (!user) {
+  // User not authenticated  
+  if (!user || !session) {
+    logAuth('AuthWrapper: rendering AuthFlow', { hasUser: !!user, hasSession: !!session });
     return <AuthFlow />;
   }
 
@@ -70,5 +71,6 @@ useEffect(() => {
   }
 
   // All good - show main app
+  logAuth('AuthWrapper: rendering main app', { user: user.email, hasSession: !!session });
   return children;
 }

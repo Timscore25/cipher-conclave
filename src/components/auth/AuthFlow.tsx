@@ -9,12 +9,14 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { Lock, Shield, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { logAuth } from '@/lib/auth/debug';
+import AuthFix from './AuthFix';
 
 export default function AuthFlow() {
   const { signIn, signUp, resendConfirmation, loading, emailConfirmationRequired } = useAuthStore();
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showAuthFix, setShowAuthFix] = useState(false);
   
   const [signInForm, setSignInForm] = useState({
     email: '',
@@ -36,6 +38,13 @@ const handleSignIn = async (e: React.FormEvent) => {
   const { error } = await signIn(signInForm.email, signInForm.password);
   if (error) {
     logAuth('signIn error', error);
+    
+    // Check for email provider disabled error
+    if (error.message.includes('Email authentication is disabled') || error.message.includes('email_provider_disabled')) {
+      setShowAuthFix(true);
+      return;
+    }
+    
     setError(error.message);
     toast({ title: 'Sign-in failed', description: error.message });
     return;
@@ -88,6 +97,11 @@ const handleSignIn = async (e: React.FormEvent) => {
       setSuccess('Confirmation email sent! Please check your inbox.');
     }
   };
+
+  // Show auth fix screen if email provider is disabled
+  if (showAuthFix) {
+    return <AuthFix />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/20 flex items-center justify-center p-4">

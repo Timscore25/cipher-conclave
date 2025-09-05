@@ -149,7 +149,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     debugLog('Sign in attempt for:', email);
     set({ loading: true, emailConfirmationRequired: false });
     
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -162,7 +162,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ loading: false });
         return { error: { 
           ...error, 
-          message: 'Email sign-in is currently disabled. Please contact the administrator or check your Supabase configuration.' 
+          message: 'Email authentication is disabled. Enable it in Supabase Dashboard → Authentication → Providers → Email' 
+        } };
+      }
+      
+      if (error.message.includes('Invalid login credentials')) {
+        set({ loading: false });
+        return { error: { 
+          ...error, 
+          message: 'Invalid email or password. Please check your credentials and try again.' 
         } };
       }
       
@@ -178,7 +186,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return { error };
     }
 
-    debugLog('Sign in successful');
+    debugLog('Sign in successful', { user: data.user?.email, session: !!data.session });
     set({ loading: false });
     return {};
   },
