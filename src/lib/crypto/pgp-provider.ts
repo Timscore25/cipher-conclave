@@ -29,20 +29,22 @@ export class PGPProvider implements CryptoProvider {
   }> {
     await this.ensureInitialized();
 
-    // Validate inputs
-    if (typeof opts.passphrase !== 'string' || opts.passphrase.trim().length < 8) {
+    // Normalize and validate inputs
+    const passphrase = String(opts.passphrase ?? '');
+    const name = String(opts.name ?? '');
+
+    if (typeof passphrase !== 'string' || passphrase.trim().length < 8) {
       throw new Error('Passphrase must be at least 8 characters long');
     }
-    if (typeof opts.name !== 'string' || opts.name.trim().length === 0) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
       throw new Error('Name is required');
     }
 
-    // Debug logging
     if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
-      console.log('[PGP] Generating identity for:', { 
-        name: opts.name, 
+      console.log('[PGP] Generating identity for:', {
+        name,
         email: opts.email,
-        passphraseLength: opts.passphrase.length 
+        passphraseLength: passphrase.length,
       });
     }
 
@@ -50,7 +52,7 @@ export class PGPProvider implements CryptoProvider {
     const keyResult = await openpgp.generateKey({
       type: 'ecc',
       curve: 'curve25519',
-      userIDs: [{ name: opts.name, email: opts.email }],
+      userIDs: [{ name, email: opts.email }],
       passphrase: undefined, // We'll encrypt separately
     });
 
@@ -68,13 +70,13 @@ export class PGPProvider implements CryptoProvider {
     // Encrypt private key with Argon2id
     const privateKeyWrapped = await this.wrapPrivateKey(
       keyResult.privateKey,
-      opts.passphrase
+      passphrase
     );
 
     if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
-      console.log('[PGP] Generated identity:', { 
-        fingerprint, 
-        wrappedKeySize: privateKeyWrapped.length 
+      console.log('[PGP] Generated identity:', {
+        fingerprint,
+        wrappedKeySize: privateKeyWrapped.length,
       });
     }
 
