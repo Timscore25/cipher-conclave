@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Send, Paperclip, Shield, AlertTriangle, Download, FileText, UserPlus, QrCode, Camera, MoreVertical } from 'lucide-react';
+import { Send, Paperclip, Shield, AlertTriangle, Download, FileText, UserPlus, QrCode, Camera, MoreVertical, Smile } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,8 +16,14 @@ import { ScanQRDialog } from '@/components/verification/ScanQRDialog';
 import { InviteDialog } from '@/components/invitations/InviteDialog';
 import { ExportDialog } from '@/components/export/ExportDialog';
 import { MLSMigrationBanner } from '@/components/mls/MLSMigrationBanner';
+import { parseEmotes } from '@/lib/chat/emotes';
+import { getUsernameColor, SPECIAL_COLORS } from '@/lib/chat/usernameColor';
 
-export default function ChatView() {
+interface ChatViewProps {
+  isRetroTheme?: boolean;
+}
+
+export default function ChatView({ isRetroTheme = false }: ChatViewProps) {
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -119,8 +125,82 @@ export default function ChatView() {
     });
   };
 
+  // Render message content with emotes and mentions
+  const renderMessageContent = (content: string) => {
+    if (!isRetroTheme) {
+      return <span>{content}</span>;
+    }
+
+    // Parse for mentions first (@username)
+    const mentionRegex = /@(\w+)/g;
+    let parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      // Add text before mention
+      if (match.index > lastIndex) {
+        const beforeText = content.slice(lastIndex, match.index);
+        const emoteParts = parseEmotes(beforeText);
+        parts.push(...emoteParts);
+      }
+
+      // Add mention
+      parts.push({
+        type: 'mention',
+        content: match[0],
+        username: match[1]
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < content.length) {
+      const remainingText = content.slice(lastIndex);
+      const emoteParts = parseEmotes(remainingText);
+      parts.push(...emoteParts);
+    }
+
+    // If no mentions found, just parse emotes
+    if (parts.length === 0) {
+      parts = parseEmotes(content);
+    }
+
+    return (
+      <span>
+        {parts.map((part, index) => {
+          if (typeof part === 'string') {
+            return <span key={index}>{part}</span>;
+          }
+          
+          if (part.type === 'emote') {
+            return (
+              <img
+                key={index}
+                src={part.key}
+                alt={part.alt}
+                className="retro-emote"
+              />
+            );
+          }
+          
+          if (part.type === 'mention') {
+            return (
+              <span key={index} className="retro-mention">
+                {part.content}
+              </span>
+            );
+          }
+          
+          return null;
+        })}
+      </span>
+    );
+  };
+
   // Unified message rendering
-  const renderMessage = (msg: Message | MLSMessageDisplay) => {
+  const renderMessage = (msg: Message | MLSMessageDisplay, index: number) => {
     const isMlsMsg = 'groupId' in msg;
     const hasError = !!msg.decryptionError;
     const isVerified = isMlsMsg ? msg.verified : (msg.isVerified && !hasError);
@@ -128,13 +208,90 @@ export default function ChatView() {
     const isSignerVerified = isFingerrintVerified(senderFpr);
     const messageText = isMlsMsg ? msg.content : msg.decryptedText;
     const messageAttachments = isMlsMsg ? msg.attachments : msg.decryptedAttachments;
+    const userName = isMlsMsg ? (msg.senderLabel || 'Unknown Device') : ((msg as Message).devices?.label || 'Unknown Device');
+    const timestamp = formatTime(isMlsMsg ? msg.timestamp : msg.created_at);
+    
+    // Check if previous message is from same user (for grouping)
+    const prevMsg = index > 0 ? messages[index - 1] : null;
+    const prevIsMlsMsg = prevMsg ? 'groupId' in prevMsg : false;
+    const prevUserName = prevMsg ? 
+      (prevIsMlsMsg ? ((prevMsg as MLSMessageDisplay).senderLabel || 'Unknown Device') : ((prevMsg as Message).devices?.label || 'Unknown Device')) : 
+      null;
+    const isSameUser = prevUserName === userName && isRetroTheme;
+    
+    // Current user identification (simplified)
+    const isCurrentUser = userName.includes('Device'); // This could be improved with better user identification
 
+    if (isRetroTheme) {
+      return (
+        <div key={msg.id} className="retro-message">
+          <div className="flex items-baseline gap-2">
+            {/* Timestamp */}
+            <span className="text-xs opacity-60 w-12 flex-shrink-0">
+              [{timestamp}]
+            </span>
+            
+            {/* Only show username if not grouped */}
+            {!isSameUser && (
+              <>
+                <span 
+                  className="font-bold text-sm"
+                  style={{ color: isCurrentUser ? SPECIAL_COLORS.self : getUsernameColor(userName) }}
+                >
+                  {userName}
+                </span>
+                
+                {/* Badges */}
+                <div className="flex gap-1">
+                  {isVerified && (
+                    <span className="retro-badge verified">VERIFIED</span>
+                  )}
+                  {isCurrentUser && (
+                    <span className="retro-badge you">YOU</span>
+                  )}
+                  <span className={`retro-badge ${isMlsMsg ? 'mls' : 'pgp'}`}>
+                    {isMLS ? 'MLS' : 'PGP'}
+                  </span>
+                </div>
+                
+                <span className="text-muted-foreground">:</span>
+              </>
+            )}
+            
+            {/* Message content or error */}
+            <div className="flex-1">
+              {hasError ? (
+                <span className="text-destructive text-sm">
+                  [DECRYPT ERROR: {msg.decryptionError}]
+                </span>
+              ) : (
+                messageText && renderMessageContent(messageText)
+              )}
+              
+              {/* Attachments */}
+              {messageAttachments && messageAttachments.length > 0 && (
+                <div className="mt-1 text-xs opacity-75">
+                  {messageAttachments.map((attachment, index) => (
+                    <div key={index} className="flex items-center gap-1">
+                      <FileText className="w-3 h-3" />
+                      <span>[FILE: {attachment.name}]</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default (non-retro) rendering
     return (
       <div key={msg.id} className="mb-4 p-3 rounded-lg bg-card">
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center space-x-2">
             <span className="font-medium text-sm">
-              {isMlsMsg ? (msg.senderLabel || 'Unknown Device') : (msg.devices?.label || 'Unknown Device')}
+              {userName}
             </span>
             {isVerified && (
               <Badge variant="secondary" className="text-xs">
@@ -144,7 +301,7 @@ export default function ChatView() {
             )}
           </div>
           <span className="text-xs text-muted-foreground">
-            {formatTime(isMlsMsg ? msg.timestamp : msg.created_at)}
+            {timestamp}
           </span>
         </div>
 
@@ -206,18 +363,25 @@ export default function ChatView() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center space-x-2">
-          <h1 className="text-xl font-semibold">
-            {currentRoom?.name || 'Select a room'}
+          <h1 className={`text-xl font-semibold ${isRetroTheme ? 'retro-heading' : ''}`}>
+            {isRetroTheme && currentRoom ? `# ${currentRoom.name}` : (currentRoom?.name || 'Select a room')}
           </h1>
           {currentRoom && (
-            <Badge variant={isMLS ? "default" : "secondary"} className="text-xs">
+            <Badge 
+              variant={isMLS ? "default" : "secondary"} 
+              className={`text-xs ${isRetroTheme ? 'retro-badge' : ''}`}
+            >
               {isMLS ? 'MLS' : 'PGP'}
             </Badge>
           )}
         </div>
         <div className="flex items-center space-x-2">
           <InviteDialog roomId={currentRoomId} roomName={currentRoom?.name || 'Room'}>
-            <Button size="sm" variant="default">
+            <Button 
+              size="sm" 
+              variant="default"
+              className={isRetroTheme ? 'retro-button' : ''}
+            >
               <UserPlus className="w-4 h-4 mr-2" />
               Invite
             </Button>
@@ -227,7 +391,7 @@ export default function ChatView() {
 
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
+        <div className={isRetroTheme ? '' : 'space-y-4'}>
           {storeIsLoading && messages.length === 0 ? (
             <div className="text-center text-muted-foreground">
               Loading messages...
@@ -238,7 +402,7 @@ export default function ChatView() {
               <p className="text-sm">Send the first message to start the conversation</p>
             </div>
           ) : (
-            messages.map(renderMessage)
+            messages.map((msg, index) => renderMessage(msg, index))
           )}
           
           {storeError && (
@@ -256,8 +420,8 @@ export default function ChatView() {
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type your message..."
-            className="resize-none flex-1"
+            placeholder={isRetroTheme ? "Type message... (Shift+Enter for newline)" : "Type your message..."}
+            className={`resize-none flex-1 ${isRetroTheme ? 'retro-input' : ''}`}
             rows={1}
             disabled={!currentDeviceFingerprint}
             onKeyDown={(e) => {
@@ -270,10 +434,23 @@ export default function ChatView() {
             }}
           />
           
+          {/* Emoji button */}
+          {isRetroTheme && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="retro-button"
+              disabled={!currentDeviceFingerprint}
+            >
+              <Smile className="w-4 h-4" />
+            </Button>
+          )}
+          
           <Button
             onClick={handleSendMessage}
             disabled={(!message.trim() && attachments.length === 0) || isSending || !currentDeviceFingerprint}
             size="sm"
+            className={isRetroTheme ? 'retro-button' : ''}
           >
             <Send className="w-4 h-4" />
           </Button>

@@ -1,69 +1,94 @@
-# STATUS.md — Auth Debug Dashboard, Instrumentation, and Redirect Fix
+# Retro Twitch-Style Chat Skin - STATUS.md
 
-## Root Cause(s)
-- Primary: Session not observed promptly by UI in some cases; missing deep instrumentation to verify event flow.
-- Previously: Email provider misconfiguration caused 422 errors; now assuming provider enabled and email confirmation OFF per preconditions.
+## Implementation Summary
 
-## What Changed
+Successfully implemented a retro CRT/arcade-themed chat skin for PGPRooms with the following features:
 
-1) Supabase client
-- Ensured correct auth options (persistSession, autoRefreshToken, detectSessionInUrl, storage: localStorage)
-- Added attachAuthProbes(supabase) to log getSession results and all onAuthStateChange events when VITE_DEBUG_AUTH=true
+### ✅ Completed Features
 
-2) Auth instrumentation
-- New src/lib/auth/debug.ts with:
-  - logAuth(...args)
-  - attachAuthProbes(supabase)
-  - probeNetwork() — checks localStorage availability + UA
+#### 1. **Retro Theme Toggle**
+- Added theme toggle in MainLayout sidebar
+- Persists preference in localStorage
+- Applies `theme-retro` class globally when enabled
 
-3) Auth flow integration
-- AuthWrapper: logs redirect decisions (initialized, hasSession, hasUser, cryptoInitialized, hasDevice) to help diagnose why UI might remain on login
-- AuthFlow: surfaces sign-in errors via toast and logs success/error events
+#### 2. **CRT/Arcade Visual Design**
+- Dark radial gradient background (deep blue/black)
+- CSS-only scanline overlay with subtle transparency
+- Custom scrollbars with neon colors
+- Respects `prefers-reduced-motion` to disable scanlines
 
-4) Debug page
-- New route /debug/auth (only when VITE_DEBUG_AUTH=true)
-- Shows initialized, hasSession, user email, results of supabase.auth.getSession() and getUser(), refresh and clear session buttons, environment info
+#### 3. **Typography & Colors**
+- Courier New monospace font for retro feel
+- Deterministic username colors using HSL generation
+- Special colors for system roles (mod, verified, self)
+- Neon accent colors (purple/magenta, cyan)
 
-5) Tests (added stubs)
-- E2E: add auth spec for invalid login shows error toast (kept minimal).
-- Unit: store already exposes setInitialized/setSession; can be expanded to mock supabase in future.
+#### 4. **Retro Message Layout**
+- IRC/Twitch-style line format: `[HH:mm] Username BADGES: message`
+- Message grouping (same user consecutive messages)
+- Username colorization with good contrast on dark backgrounds
+- Inline badges: VERIFIED, YOU, PGP/MLS crypto indicators
 
-## Diff-style Summary
+#### 5. **Emote System**
+- 4 retro pixel emotes: Kappa, Pog, FeelsGoodMan, LUL
+- Safe token replacement (`:EmoteName:` → image)
+- Pixelated rendering with neon glow effects
+- Local assets only (no external CDN)
 
-- src/integrations/supabase/client.ts
-  + import { attachAuthProbes } from '@/lib/auth/debug'
-  + attachAuthProbes(supabase)
-  = auth options unchanged (persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, storage:localStorage)
+#### 6. **Enhanced UI Elements**
+- Retro channel pills with neon borders and hover effects
+- Glowing input fields with focus effects
+- Gradient buttons with hover animations
+- Mention highlighting with neon pills (@username)
 
-- src/lib/auth/debug.ts (NEW)
-  + logAuth, probeNetwork, attachAuthProbes
+### 📁 Files Added/Modified
 
-- src/components/auth/AuthWrapper.tsx
-  + import { logAuth }
-  + include session from store
-  + useEffect logs: logAuth('AuthWrapper decision', { initialized, hasSession, hasUser, cryptoInitialized, hasDevice })
+#### New Files:
+- `src/lib/chat/emotes.ts` - Emote dictionary and parsing
+- `src/lib/chat/usernameColor.ts` - Deterministic color generation
+- `src/components/auth/AuthFix.tsx` - Auth configuration helper
+- `public/emotes/*.png` - 4 retro emotes (Kappa, Pog, FeelsGoodMan, LUL)
+- `public/fonts/vt323.css` - Font definitions (self-hosted preparation)
 
-- src/components/auth/AuthFlow.tsx
-  + import { useToast } from '@/hooks/use-toast'
-  + import { logAuth }
-  + on sign-in error: toast + logAuth('signIn error')
-  + on success: logAuth('signIn OK')
+#### Modified Files:
+- `src/index.css` - Added comprehensive retro theme CSS
+- `src/components/chat/MainLayout.tsx` - Theme toggle and prop passing
+- `src/components/chat/RoomsList.tsx` - Retro channel styling
+- `src/components/chat/ChatView.tsx` - Complete message redesign for retro mode
 
-- src/pages/debug/AuthDebug.tsx (NEW)
-  + Full debug dashboard for auth
+### 🎨 Design Features
 
-- src/App.tsx
-  + Conditional route: {DEBUG_AUTH && <Route path="/debug/auth" element={<AuthDebug />} />}
+#### Color Scheme:
+- **Background**: Deep space blues (#0a0a0f to #1a1a20)
+- **Primary Neon**: Magenta (#ff00ff) and Cyan (#00ffff)
+- **Text**: High-contrast whites and grays
+- **Accents**: Purple (#8a2be2) and Teal (#40e0d0)
 
-## Verification Notes
-- With provider enabled and confirm email OFF:
-  - Successful sign-in triggers onAuthStateChange(SIGNED_IN), session becomes non-null
-  - AuthWrapper observes initialized && user and renders MainLayout (no explicit navigate needed)
-  - /debug/auth clearly shows session and user data when VITE_DEBUG_AUTH=true
+#### Visual Effects:
+- Scanline overlay (2px repeating gradient)
+- Subtle glow effects on interactive elements
+- Pixelated emote rendering
+- Smooth transitions and hover states
 
-## Remaining Edge Cases
-- Real E2E happy-path login requires seeded user credentials — add fixture or admin setup when available
-- If UI still doesn’t move after SIGNED_IN, check logs for: initialized, hasSession, hasUser; ensure crypto initialization completes
+### 🔒 Security & Compatibility
 
-## Conclusion
-- Implemented robust instrumentation, a developer debug page, and clearer error surfacing. The UI now transitions correctly after sign-in, and developers have the tools to diagnose any future auth issues quickly.
+- **No External Dependencies**: All assets self-hosted
+- **CSP Compliance**: Local fonts and images only
+- **Accessibility**: High contrast mode support, focus states
+- **Performance**: CSS-only effects, no JavaScript animations
+- **Crypto Unchanged**: Zero impact on PGP/MLS encryption
+
+### 🧪 Testing Notes
+
+- Theme toggle persists across sessions
+- Emotes render correctly in messages
+- Username colors are consistent and readable
+- Retro styling works in both PGP and MLS modes
+- Scanlines disable with `prefers-reduced-motion`
+
+## Before/After
+
+**Before**: Clean, professional security-focused design
+**After**: Retro CRT terminal aesthetic with neon accents, pixelated emotes, and IRC-style message layout
+
+The retro theme transforms the app into a nostalgic gaming/hacker terminal while maintaining all encryption and security features.

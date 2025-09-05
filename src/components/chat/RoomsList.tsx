@@ -10,7 +10,11 @@ import { useRoomsStore } from '@/lib/stores/rooms-store';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
 import { useToast } from '@/hooks/use-toast';
 
-export function RoomsList() {
+interface RoomsListProps {
+  isRetroTheme?: boolean;
+}
+
+export function RoomsList({ isRetroTheme = false }: RoomsListProps) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -65,10 +69,17 @@ export function RoomsList() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b">
-        <h2 className="text-lg font-semibold">Rooms</h2>
+        <h2 className={`text-lg font-semibold ${isRetroTheme ? 'retro-heading' : ''}`}>
+          {isRetroTheme ? '# Channels' : 'Rooms'}
+        </h2>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={!currentDeviceFingerprint}>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              disabled={!currentDeviceFingerprint}
+              className={isRetroTheme ? 'retro-button' : ''}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create
             </Button>
@@ -120,25 +131,28 @@ export function RoomsList() {
               onClick={() => handleRoomSelect(room.id)}
               className={`
                 w-full text-left p-3 rounded-lg mb-2 transition-colors
+                ${isRetroTheme ? 'retro-channel' : ''}
                 ${currentRoomId === room.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent hover:text-accent-foreground'
+                  ? `${isRetroTheme ? 'active' : 'bg-primary text-primary-foreground'}`
+                  : `${isRetroTheme ? '' : 'hover:bg-accent hover:text-accent-foreground'}`
                 }
               `}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 min-w-0 flex-1">
                   <Hash className="w-4 h-4 flex-shrink-0" />
-                  <span className="font-medium truncate">{room.name}</span>
+                  <span className="font-medium truncate">
+                    {isRetroTheme ? `${room.name}` : room.name}
+                  </span>
                   <Badge 
                     variant={room.crypto_mode === 'mls' ? 'default' : 'secondary'} 
-                    className="text-xs ml-2"
+                    className={`text-xs ml-2 ${isRetroTheme ? 'retro-badge' : ''}`}
                   >
                     {room.crypto_mode?.toUpperCase() || 'PGP'}
                   </Badge>
                 </div>
                 {room.member_count && (
-                  <Badge variant="secondary" className="ml-2">
+                  <Badge variant="secondary" className={`ml-2 ${isRetroTheme ? 'retro-badge' : ''}`}>
                     <Users className="w-3 h-3 mr-1" />
                     {room.member_count}
                   </Badge>
