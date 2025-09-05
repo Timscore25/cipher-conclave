@@ -190,9 +190,11 @@ export default function ChatView() {
   return (
     <div className="flex flex-col h-full">
       {/* Migration Banner for PGP rooms */}
-      {currentRoom && !isMLS && (
+      {currentRoom && (
         <MLSMigrationBanner 
           roomId={currentRoomId} 
+          roomName={currentRoom.name}
+          currentCryptoMode={currentRoom.crypto_mode}
           onMigrationComplete={() => {
             if (currentRoomId) {
               loadMLSMessages(currentRoomId);
