@@ -83,7 +83,7 @@ describe('Crypto Store - Device Management', () => {
       
       // Check store state
       const state = useCryptoStore.getState();
-      expect(state.hasDevice).toBe(true);
+      expect(state.hasAnyDevice).toBe(true);
       expect(state.currentDeviceFingerprint).toBe(result.fingerprint);
     });
 

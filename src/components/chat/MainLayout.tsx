@@ -5,7 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
-import { RoomsList } from './RoomsList';
+import RoomsList from './RoomsList';
 import ChatView from './ChatView';
 import UnlockPrompt from './UnlockPrompt';
 import { LogOut, Lock, Shield, Monitor } from 'lucide-react';
@@ -87,7 +87,7 @@ export function MainLayout() {
             
             <SidebarContent>
               {isDeviceUnlocked ? (
-                <RoomsList isRetroTheme={isRetroTheme} />
+                <RoomsList />
               ) : (
                 <div className="p-4">
                   <div className="text-center space-y-3">

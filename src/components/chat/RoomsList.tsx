@@ -14,7 +14,15 @@ import UnlockPrompt from '@/components/chat/UnlockPrompt';
 import { Plus, Hash, Users, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function RoomsList() {
-  const { rooms, loading, error, fetchRooms, createRoom, selectRoom, selectedRoomId } = useRoomsStore();
+  const { 
+    rooms, 
+    isLoading: loading, 
+    error, 
+    loadRooms: fetchRooms, 
+    createRoom, 
+    setCurrentRoom: selectRoom, 
+    currentRoomId: selectedRoomId 
+  } = useRoomsStore();
   const { hasAnyDevice, hasLocalDevice, isUnlocked } = useCryptoStore();
   const { toast } = useToast();
   const [showCreateDialog, setShowCreateDialog] = useState(false);

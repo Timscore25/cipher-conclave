@@ -8,7 +8,7 @@ import { logAuth } from '@/lib/auth/debug';
 
 export default function AuthWrapper({ children }: { children: React.ReactNode }) {
   const { user, session, loading, initialized, initAuthListener } = useAuthStore();
-  const { isInitialized: cryptoInitialized, hasDevice, initialize: initializeCrypto } = useCryptoStore();
+  const { isInitialized: cryptoInitialized, hasAnyDevice, initialize: initializeCrypto } = useCryptoStore();
   const authCleanupRef = useRef<(() => void) | null>(null);
 
   // Initialize auth listener once
@@ -32,12 +32,12 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
       hasSession: !!session, 
       hasUser: !!user, 
       cryptoInitialized, 
-      hasDevice 
+      hasAnyDevice
     });
     if (initialized && user) {
       initializeCrypto();
     }
-  }, [initialized, user, session, cryptoInitialized, hasDevice, initializeCrypto]);
+  }, [initialized, user, session, cryptoInitialized, hasAnyDevice, initializeCrypto]);
 
   // Show loading while initializing
   if (loading || !initialized) {

@@ -232,8 +232,50 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       
       const deviceIdString = crypto.randomUUID() as string;
 
-      // Wrap the private key with the passphrase using existing method
-      const privateKeyWrapped = await pgpProvider.wrapPrivateKey(privateKeyArmored, passphrase);
+      // Wrap the private key with passphrase using inline encryption (same as createDevice)
+      const keyData = new TextEncoder().encode(privateKeyArmored);
+      
+      let privateKeyWrapped: Uint8Array;
+      
+      if (typeof window !== 'undefined' && window.crypto?.subtle) {
+        // Use WebCrypto API
+        const key = await window.crypto.subtle.importKey(
+          'raw',
+          new TextEncoder().encode(passphrase),
+          { name: 'PBKDF2' },
+          false,
+          ['deriveKey']
+        );
+
+        const derivedKey = await window.crypto.subtle.deriveKey(
+          {
+            name: 'PBKDF2',
+            salt: new TextEncoder().encode('pgp-rooms-salt'),
+            iterations: 100000,
+            hash: 'SHA-256'
+          },
+          key,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['encrypt']
+        );
+
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await window.crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv },
+          derivedKey,
+          keyData
+        );
+
+        const result = new Uint8Array(iv.length + encrypted.byteLength);
+        result.set(iv);
+        result.set(new Uint8Array(encrypted), iv.length);
+        
+        privateKeyWrapped = result;
+      } else {
+        // Fallback to basic encoding (less secure)
+        privateKeyWrapped = new Uint8Array(keyData);
+      }
       
       // Store locally
       await keyVault.storeDevice({
