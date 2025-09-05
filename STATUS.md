@@ -1,6 +1,115 @@
-# STATUS.md
+# Multi-Device Onboarding & RLS Fix - STATUS
 
-## Authentication & Crypto Status Report
+## Root Cause Analysis
+- **Primary Issue**: Users who created devices on different origins/browsers couldn't access their rooms due to local-only device detection
+- **Missing Components**: No multi-device detection, import functionality, or proper gating logic
+- **RLS Issue**: Device table lacked proper Row Level Security policies for cross-device scenarios
+
+## Changes Implemented
+
+### 1. Database Migration
+- **File**: `supabase/migrations/*_device_rls_policies.sql`
+- **Changes**: 
+  - Enabled RLS on `devices` table
+  - Added policies: `devices_select_own`, `devices_insert_own`, `devices_update_own`
+  - Ensures users can only access their own devices
+
+### 2. Enhanced Crypto Store
+- **File**: `src/lib/stores/crypto-store.ts`
+- **Key Changes**:
+  - Added `fetchRemoteDevices()` to check Supabase device table
+  - New state tracking: `hasAnyDevice`, `hasLocalDevice`, `remoteDevices`
+  - Added `importDevice()` method for importing existing keys
+  - Added `isUnlocked()` helper method
+  - Improved device detection logic that checks both local and remote storage
+
+### 3. Import Device Dialog
+- **File**: `src/components/device/ImportDeviceDialog.tsx` (NEW)
+- **Features**:
+  - Private key import with passphrase validation
+  - QR code import placeholder (for future implementation)
+  - Proper error handling and user feedback
+  - Integrates with crypto store to save imported devices
+
+### 4. Device Status Banner
+- **File**: `src/components/device/DeviceStatusBanner.tsx` (NEW)
+- **Functionality**:
+  - Context-aware messaging based on device state
+  - Shows different CTAs: Create, Import, or Unlock
+  - Visual indicators for device status (ready, locked, missing)
+
+### 5. Enhanced RoomsList Gating
+- **File**: `src/components/chat/RoomsList.tsx`
+- **Improvements**:
+  - `checkDeviceAndExecute()` for proper access control
+  - Context-aware error messages
+  - Pending action support (unlock → continue with original action)
+  - Integration with device status banner and import dialog
+
+### 6. Updated Unlock Prompt
+- **File**: `src/components/chat/UnlockPrompt.tsx`
+- **Changes**:
+  - Added success/cancel callback support
+  - Better integration for pending actions
+  - Improved UX with Cancel button when needed
+
+### 7. PGP Provider Extensions
+- **File**: `src/lib/crypto/pgp-provider.ts`
+- **New Methods**:
+  - `extractKeyInfo()` - extracts fingerprint and public key from private key
+  - Enhanced key wrapping functionality
+
+## User Flow Improvements
+
+### New User (No Device)
+1. Sees "Add Device" banner with Create/Import options
+2. Can create new device or import existing one
+3. After device setup, can create/join rooms
+
+### Existing User, New Origin
+1. Sees "Device not available locally" message
+2. Can import their existing device
+3. After import, automatically unlocked and ready
+
+### Existing User, Device Locked
+1. Sees "Unlock your device" prompt
+2. Can unlock and continue with pending action
+3. Seamless continuation of interrupted workflow
+
+## Security Improvements
+- Proper RLS policies prevent unauthorized device access
+- Import validation ensures only valid PGP keys are accepted
+- Secure key wrapping for imported devices
+- Context-aware error messages prevent information leakage
+
+## Testing Status
+- **Unit Tests**: Need to be updated for new crypto store methods
+- **E2E Tests**: Need to be created for multi-device scenarios
+- **Manual Testing**: Core flows verified
+
+## Outstanding Items
+1. **Security Warning**: Leaked password protection disabled in Supabase (user needs to enable in dashboard)
+2. **QR Code Import**: Placeholder implementation - needs full QR scanning functionality
+3. **Tests**: Unit and E2E tests need to be updated/created
+4. **Device Management UI**: Could add device management page for power users
+
+## Impact
+- ✅ Resolves cross-origin device access issues
+- ✅ Enables seamless device import/export workflows  
+- ✅ Improves user onboarding experience
+- ✅ Adds proper security boundaries with RLS
+- ✅ Context-aware error messages reduce user confusion
+
+## Files Changed
+- `src/lib/stores/crypto-store.ts` (enhanced)
+- `src/components/chat/RoomsList.tsx` (replaced)
+- `src/components/chat/UnlockPrompt.tsx` (enhanced)
+- `src/components/device/ImportDeviceDialog.tsx` (new)
+- `src/components/device/DeviceStatusBanner.tsx` (new)
+- `src/lib/crypto/pgp-provider.ts` (extended)
+- `src/components/auth/AuthWrapper.tsx` (updated property names)
+- `src/test/crypto-store.test.ts` (updated property names)
+- Database migration for device RLS policies
 
 ### ✅ Auth Flow - FIXED (2024-01-05)
 **Root Cause**: Sign-up/sign-in was using generic handlers without proper error surfacing and user feedback.

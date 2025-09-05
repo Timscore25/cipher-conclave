@@ -7,7 +7,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
 import { Lock, Shield } from 'lucide-react';
 
-export default function UnlockPrompt() {
+interface UnlockPromptProps {
+  onSuccess?: () => void;
+  onCancel?: () => void;
+}
+
+export default function UnlockPrompt({ onSuccess, onCancel }: UnlockPromptProps) {
   const { currentDeviceFingerprint, unlockDevice } = useCryptoStore();
   const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +46,9 @@ export default function UnlockPrompt() {
       if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
         console.log('[UnlockPrompt] Device unlocked successfully');
       }
+
+      // Call success callback if provided
+      onSuccess?.();
     } catch (err: any) {
       const errorMessage = err.message?.includes('incorrect passphrase') || err.message?.includes('Failed to decrypt')
         ? 'Invalid passphrase. Please try again.'
@@ -93,9 +101,16 @@ export default function UnlockPrompt() {
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading || !passphrase}>
-              {loading ? 'Unlocking...' : 'Unlock Device'}
-            </Button>
+            <div className="flex space-x-2">
+              {onCancel && (
+                <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+                  Cancel
+                </Button>
+              )}
+              <Button type="submit" className="flex-1" disabled={loading || !passphrase}>
+                {loading ? 'Unlocking...' : 'Unlock Device'}
+              </Button>
+            </div>
           </form>
 
           {currentDeviceFingerprint && (

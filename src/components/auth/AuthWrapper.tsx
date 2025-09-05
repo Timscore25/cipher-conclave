@@ -74,7 +74,7 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
   }
 
   // User authenticated but no crypto device
-  if (!hasDevice) {
+  if (!hasAnyDevice) {
     logAuth('AuthWrapper: no crypto device, showing onboarding');
     return <OnboardingFlow />;
   }

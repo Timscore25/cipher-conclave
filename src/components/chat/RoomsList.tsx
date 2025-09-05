@@ -1,275 +1,252 @@
 import { useState, useEffect } from 'react';
-import { Plus, Users, Hash, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRoomsStore } from '@/lib/stores/rooms-store';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
 import { useToast } from '@/hooks/use-toast';
+import DeviceStatusBanner from '@/components/device/DeviceStatusBanner';
+import ImportDeviceDialog from '@/components/device/ImportDeviceDialog';
+import UnlockPrompt from '@/components/chat/UnlockPrompt';
+import { Plus, Hash, Users, AlertCircle, Loader2 } from 'lucide-react';
 
-interface RoomsListProps {
-  isRetroTheme?: boolean;
-}
-
-function logRoomsUI(message: string, ...args: any[]) {
-  if (import.meta.env.VITE_DEBUG_ROOMS === 'true') {
-    console.log(`[ROOMS_UI] ${message}`, ...args);
-  }
-}
-
-export function RoomsList({ isRetroTheme = false }: RoomsListProps) {
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
-
-  const { 
-    rooms, 
-    currentRoomId, 
-    isLoading, 
-    error, 
-    loadRooms, 
-    createRoom, 
-    setCurrentRoom,
-    clearError 
-  } = useRoomsStore();
-  
-  const { currentDeviceFingerprint } = useCryptoStore();
+export default function RoomsList() {
+  const { rooms, loading, error, fetchRooms, createRoom, selectRoom, selectedRoomId } = useRoomsStore();
+  const { hasAnyDevice, hasLocalDevice, isUnlocked } = useCryptoStore();
   const { toast } = useToast();
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showUnlockPrompt, setShowUnlockPrompt] = useState(false);
+  const [roomName, setRoomName] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  // Load rooms on mount
   useEffect(() => {
-    logRoomsUI('Component mounted, loading rooms...');
-    loadRooms();
-  }, [loadRooms]);
+    fetchRooms();
+  }, [fetchRooms]);
 
-  // Log state changes
-  useEffect(() => {
-    logRoomsUI('State change:', { 
-      roomsCount: rooms.length, 
-      isLoading, 
-      error, 
-      currentRoomId,
-      hasDevice: !!currentDeviceFingerprint
-    });
-  }, [rooms.length, isLoading, error, currentRoomId, currentDeviceFingerprint]);
+  const checkDeviceAndExecute = (action: 'create' | 'select', roomId?: string) => {
+    if (!hasAnyDevice) {
+      toast({
+        title: 'Add a device to start',
+        description: 'Create or import a device to begin chatting.',
+        variant: 'destructive',
+      });
+      return false;
+    }
 
-  const handleCreateRoom = async () => {
-    if (!newRoomName.trim()) return;
+    if (!hasLocalDevice) {
+      toast({
+        title: 'Import your device',
+        description: 'Your device is not available on this browser. Please import your device.',
+        variant: 'destructive',
+      });
+      setShowImportDialog(true);
+      return false;
+    }
 
-    logRoomsUI('Creating room:', { name: newRoomName.trim() });
+    if (!isUnlocked()) {
+      toast({
+        title: 'Unlock your device',
+        description: 'Enter your passphrase to continue.',
+        variant: 'destructive',
+      });
+      setPendingAction(action === 'create' ? 'create' : `select:${roomId}`);
+      setShowUnlockPrompt(true);
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleCreateRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    setIsCreating(true);
+    if (!roomName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Room name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!checkDeviceAndExecute('create')) {
+      return;
+    }
+
     try {
-      await createRoom(newRoomName.trim());
-      setNewRoomName('');
-      setIsCreateDialogOpen(false);
+      setIsCreating(true);
+      await createRoom(roomName.trim());
       
       toast({
-        title: "Room created",
-        description: `Successfully created room "${newRoomName}".`,
+        title: 'Success',
+        description: `Room "${roomName.trim()}" created successfully`,
       });
       
-      logRoomsUI('Room created successfully');
+      setRoomName('');
+      setShowCreateDialog(false);
     } catch (error: any) {
-      logRoomsUI('Failed to create room:', error);
+      console.error('[ROOMS] Create room failed:', error);
       
-      const errorMessage = error.message || 'An error occurred while creating the room.';
-      let description = errorMessage;
-      
-      // Provide helpful error messages for common issues
-      if (errorMessage.includes('permission denied') || errorMessage.includes('RLS')) {
-        description = 'Your account may not have the necessary permissions. Please sign out and sign in again, or contact support.';
-      } else if (errorMessage.includes('No device found')) {
-        description = 'You need to create a device first before creating rooms.';
+      let errorMessage = 'Failed to create room';
+      if (error.message?.includes('permission denied') || error.message?.includes('RLS')) {
+        errorMessage = 'Permission denied. Your account may not have proper permissions. Please sign out/in or contact support.';
+      } else if (error.message) {
+        errorMessage = error.message;
       }
       
       toast({
-        title: "Failed to create room",
-        description,
-        variant: "destructive",
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
       });
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleRoomSelect = (roomId: string) => {
-    logRoomsUI('Selecting room:', { roomId });
-    setCurrentRoom(roomId);
-    if (error) clearError();
+  const handleSelectRoom = (roomId: string) => {
+    if (checkDeviceAndExecute('select', roomId)) {
+      selectRoom(roomId);
+    }
   };
 
-  const isEmptyState = !isLoading && rooms.length === 0 && !error;
-  const hasError = !!error;
+  const handleUnlockSuccess = () => {
+    setShowUnlockPrompt(false);
+    
+    if (pendingAction) {
+      if (pendingAction === 'create') {
+        setShowCreateDialog(true);
+      } else if (pendingAction.startsWith('select:')) {
+        const roomId = pendingAction.split(':')[1];
+        selectRoom(roomId);
+      }
+      setPendingAction(null);
+    }
+  };
 
-  logRoomsUI('Render state:', { isEmptyState, hasError, isLoading, roomsCount: rooms.length });
+  if (showUnlockPrompt) {
+    return <UnlockPrompt onSuccess={handleUnlockSuccess} onCancel={() => setShowUnlockPrompt(false)} />;
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b">
-        <h2 className={`text-lg font-semibold ${isRetroTheme ? 'retro-heading' : ''}`}>
-          {isRetroTheme ? '# Channels' : 'Rooms'}
-        </h2>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button 
-              size="sm" 
-              variant="outline" 
-              disabled={!currentDeviceFingerprint}
-              className={isRetroTheme ? 'retro-button' : ''}
-              title={!currentDeviceFingerprint ? 'Create a device first to create rooms' : 'Create a new room'}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create New Room</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="room-name">Room Name</Label>
-                <Input
-                  id="room-name"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                  placeholder="Enter room name..."
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !isCreating) {
-                      handleCreateRoom();
+    <>
+      <Card className="h-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center space-x-2">
+              <Hash className="w-5 h-5" />
+              <span>Rooms</span>
+            </span>
+            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+              <DialogTrigger asChild>
+                <Button 
+                  size="sm" 
+                  onClick={(e) => {
+                    if (!checkDeviceAndExecute('create')) {
+                      e.preventDefault();
                     }
                   }}
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                  disabled={isCreating}
                 >
-                  Cancel
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create
                 </Button>
-                <Button
-                  onClick={handleCreateRoom}
-                  disabled={!newRoomName.trim() || isCreating}
-                >
-                  {isCreating ? 'Creating...' : 'Create Room'}
-                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Room</DialogTitle>
+                  <DialogDescription>
+                    Create a new encrypted chat room
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateRoom} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="room-name">Room Name</Label>
+                    <Input
+                      id="room-name"
+                      placeholder="Enter room name..."
+                      value={roomName}
+                      onChange={(e) => setRoomName(e.target.value)}
+                      disabled={isCreating}
+                      required
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setShowCreateDialog(false)}
+                      disabled={isCreating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={isCreating || !roomName.trim()}>
+                      {isCreating ? 'Creating...' : 'Create Room'}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </CardTitle>
+        </CardHeader>
+          
+          <CardContent className="p-4">
+            <DeviceStatusBanner
+              onCreateDevice={() => {/* Will be handled by existing onboarding flow */}}
+              onImportDevice={() => setShowImportDialog(true)}
+              onUnlockDevice={() => setShowUnlockPrompt(true)}
+            />
+
+            {loading && (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Loading rooms...</span>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+            )}
 
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          {/* Loading State */}
-          {isLoading && (
-            <div className="text-center py-8 text-muted-foreground">
-              <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-              <p>Loading rooms...</p>
-            </div>
-          )}
-
-          {/* Error State */}
-          {hasError && (
-            <div className="p-4">
+            {error && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <div className="font-medium mb-1">Failed to load rooms</div>
-                  {import.meta.env.VITE_DEBUG_ROOMS === 'true' && (
-                    <div className="text-xs opacity-75 font-mono">{error}</div>
-                  )}
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={loadRooms}
-                    className="mt-2"
-                  >
-                    Try Again
-                  </Button>
+                  Failed to load rooms: {error}
                 </AlertDescription>
               </Alert>
-            </div>
-          )}
+            )}
 
-          {/* Empty State */}
-          {isEmptyState && (
-            <div className="text-center py-12 px-4">
-              <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                <Hash className="w-8 h-8 text-muted-foreground" />
+            {!loading && !error && rooms.length === 0 && (
+              <div className="text-center p-8 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium mb-2">No rooms yet</p>
+                <p className="text-sm">Create a room to start chatting</p>
               </div>
-              <h3 className="text-lg font-medium mb-2">No rooms yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Create a room to start chatting with end-to-end encryption
-              </p>
-              {currentDeviceFingerprint ? (
-                <Button 
-                  onClick={() => setIsCreateDialogOpen(true)}
-                  className={isRetroTheme ? 'retro-button' : ''}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Room
-                </Button>
-              ) : (
-                <Alert className="max-w-sm mx-auto">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    You need to create a device first before you can create rooms.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          )}
+            )}
 
-          {/* Rooms List */}
-          {!isLoading && !hasError && rooms.length > 0 && (
-            <>
-              {rooms.map((room) => (
-                <button
-                  key={room.id}
-                  onClick={() => handleRoomSelect(room.id)}
-                  className={`
-                    w-full text-left p-3 rounded-lg mb-2 transition-colors
-                    ${isRetroTheme ? 'retro-channel' : ''}
-                    ${currentRoomId === room.id
-                      ? `${isRetroTheme ? 'active' : 'bg-primary text-primary-foreground'}`
-                      : `${isRetroTheme ? '' : 'hover:bg-accent hover:text-accent-foreground'}`
-                    }
-                  `}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 min-w-0 flex-1">
-                      <Hash className="w-4 h-4 flex-shrink-0" />
-                      <span className="font-medium truncate">
-                        {isRetroTheme ? `${room.name}` : room.name}
-                      </span>
-                      <Badge 
-                        variant={room.crypto_mode === 'mls' ? 'default' : 'secondary'} 
-                        className={`text-xs ml-2 ${isRetroTheme ? 'retro-badge' : ''}`}
-                      >
-                        {room.crypto_mode?.toUpperCase() || 'PGP'}
-                      </Badge>
-                    </div>
-                    {room.member_count && (
-                      <Badge variant="secondary" className={`ml-2 ${isRetroTheme ? 'retro-badge' : ''}`}>
-                        <Users className="w-3 h-3 mr-1" />
-                        {room.member_count}
-                      </Badge>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
-  );
+            {!loading && !error && rooms.length > 0 && (
+              <div className="space-y-1">
+                {rooms.map((room) => (
+                  <Button
+                    key={room.id}
+                    variant={selectedRoomId === room.id ? "secondary" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => handleSelectRoom(room.id)}
+                  >
+                    <Hash className="w-4 h-4 mr-2" />
+                    {room.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <ImportDeviceDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+        />
+      </>
+    );
 }
