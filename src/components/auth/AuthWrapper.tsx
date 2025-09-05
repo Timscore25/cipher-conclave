@@ -4,9 +4,10 @@ import { useCryptoStore } from '@/lib/stores/crypto-store';
 import AuthFlow from './AuthFlow';
 import OnboardingFlow from './OnboardingFlow';
 import { Skeleton } from '@/components/ui/skeleton';
+import { logAuth } from '@/lib/auth/debug';
 
 export default function AuthWrapper({ children }: { children: React.ReactNode }) {
-  const { user, loading, initialized, initAuthListener } = useAuthStore();
+  const { user, session, loading, initialized, initAuthListener } = useAuthStore();
   const { isInitialized: cryptoInitialized, hasDevice, initialize: initializeCrypto } = useCryptoStore();
   const authCleanupRef = useRef<(() => void) | null>(null);
 
@@ -24,12 +25,13 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
     };
   }, [initAuthListener]);
 
-  // Initialize crypto after auth is ready
-  useEffect(() => {
-    if (initialized && user) {
-      initializeCrypto();
-    }
-  }, [initialized, user, initializeCrypto]);
+// Initialize crypto after auth is ready
+useEffect(() => {
+  logAuth('AuthWrapper decision', { initialized, hasSession: !!session, hasUser: !!user, cryptoInitialized, hasDevice });
+  if (initialized && user) {
+    initializeCrypto();
+  }
+}, [initialized, user, session, cryptoInitialized, hasDevice, initializeCrypto]);
 
   // Show loading while initializing
   if (loading || !initialized) {

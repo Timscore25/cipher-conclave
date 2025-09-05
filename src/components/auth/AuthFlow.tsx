@@ -7,9 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { Lock, Shield, Users } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { logAuth } from '@/lib/auth/debug';
 
 export default function AuthFlow() {
   const { signIn, signUp, resendConfirmation, loading, emailConfirmationRequired } = useAuthStore();
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -25,16 +28,20 @@ export default function AuthFlow() {
     displayName: '',
   });
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
+const handleSignIn = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError(null);
+  setSuccess(null);
 
-    const { error } = await signIn(signInForm.email, signInForm.password);
-    if (error) {
-      setError(error.message);
-    }
-  };
+  const { error } = await signIn(signInForm.email, signInForm.password);
+  if (error) {
+    logAuth('signIn error', error);
+    setError(error.message);
+    toast({ title: 'Sign-in failed', description: error.message });
+    return;
+  }
+  logAuth('signIn OK', { email: signInForm.email });
+};
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
