@@ -165,12 +165,35 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
         privateKeyWrapped: result.privateKeyWrapped,
       });
 
+      // Ensure user profile exists in public.users to satisfy FK
+      const { data: userResp } = await supabase.auth.getUser();
+      const authUser = userResp?.user;
+      if (!authUser) throw new Error('Not authenticated');
+
+      const { data: existingUserRow } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', authUser.id)
+        .single();
+
+      if (!existingUserRow) {
+        const displayName = (authUser.user_metadata as any)?.display_name || 'Anonymous User';
+        const { error: userInsertError } = await supabase.from('users').insert({
+          id: authUser.id,
+          display_name: displayName,
+        });
+        if (userInsertError) {
+          await keyVault.deleteDevice(deviceId);
+          throw userInsertError;
+        }
+      }
+
       // Store in Supabase
       const { error: supabaseError } = await supabase
         .from('devices')
         .insert({
           id: deviceId,
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: authUser.id,
           label: opts.label.trim(),
           fingerprint: result.fingerprint,
           public_key_armored: result.publicKeyArmored,
@@ -297,12 +320,35 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       let finalDeviceId = deviceIdString;
 
       if (!existingDevice) {
+        // Ensure user profile exists to satisfy FK
+        const { data: userResp } = await supabase.auth.getUser();
+        const authUser = userResp?.user;
+        if (!authUser) throw new Error('Not authenticated');
+
+        const { data: existingUserRow } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', authUser.id)
+          .single();
+
+        if (!existingUserRow) {
+          const displayName = (authUser.user_metadata as any)?.display_name || 'Anonymous User';
+          const { error: userInsertError } = await supabase.from('users').insert({
+            id: authUser.id,
+            display_name: displayName,
+          });
+          if (userInsertError) {
+            await keyVault.deleteDevice(deviceIdString);
+            throw userInsertError;
+          }
+        }
+
         // Insert new device in Supabase
         const { data, error: supabaseError } = await supabase
           .from('devices')
           .insert({
             id: deviceIdString,
-            user_id: (await supabase.auth.getUser()).data.user?.id,
+            user_id: authUser.id,
             label: 'Imported Device',
             fingerprint: keyInfo.fingerprint,
             public_key_armored: keyInfo.publicKeyArmored,
