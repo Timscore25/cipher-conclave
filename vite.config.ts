@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
             cspMeta: mode === 'development' ? `
               <meta http-equiv="Content-Security-Policy" content="
                 default-src 'self';
-                script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
+                script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval';
                 style-src 'self' 'unsafe-inline';
                 img-src 'self' blob: data:;
                 connect-src 'self' https://*.supabase.co ws://localhost:* wss://localhost:*;
@@ -43,7 +43,6 @@ export default defineConfig(({ mode }) => {
                 base-uri 'none';
                 frame-ancestors 'none';
                 form-action 'self';
-                require-trusted-types-for 'script';
               ">
             ` : '',
           },

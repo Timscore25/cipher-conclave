@@ -1,0 +1,97 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:pgp-rooms-sbom-2025-01-05",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-01-05T00:00:00.000Z",
+    "component": {
+      "type": "application",
+      "name": "PGP Rooms",
+      "version": "1.0.0",
+      "description": "End-to-end encrypted chat application with PGP encryption"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "openpgp",
+      "version": "5.11.2",
+      "description": "OpenPGP implementation for JavaScript",
+      "licenses": [{"license": {"name": "LGPL-3.0"}}],
+      "purl": "pkg:npm/openpgp@5.11.2",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "TBD-BUILD-TIME-HASH"
+        }
+      ]
+    },
+    {
+      "type": "library", 
+      "name": "libsodium-wrappers",
+      "version": "0.7.15",
+      "description": "Sodium crypto library for JavaScript",
+      "licenses": [{"license": {"name": "ISC"}}],
+      "purl": "pkg:npm/libsodium-wrappers@0.7.15",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "name": "@supabase/supabase-js", 
+      "version": "2.57.0",
+      "description": "Supabase client library",
+      "licenses": [{"license": {"name": "MIT"}}],
+      "purl": "pkg:npm/@supabase/supabase-js@2.57.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "18.3.1",
+      "description": "React JavaScript library",
+      "licenses": [{"license": {"name": "MIT"}}],
+      "purl": "pkg:npm/react@18.3.1",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "name": "qrcode",
+      "version": "1.5.4", 
+      "description": "QR code generation library",
+      "licenses": [{"license": {"name": "MIT"}}],
+      "purl": "pkg:npm/qrcode@1.5.4",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "name": "jsqr",
+      "version": "1.4.0",
+      "description": "QR code reading library",
+      "licenses": [{"license": {"name": "Apache-2.0"}}],
+      "purl": "pkg:npm/jsqr@1.4.0", 
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "name": "idb",
+      "version": "8.0.0",
+      "description": "IndexedDB wrapper library",
+      "licenses": [{"license": {"name": "ISC"}}],
+      "purl": "pkg:npm/idb@8.0.0",
+      "scope": "required"
+    }
+  ],
+  "vulnerabilities": [],
+  "externalReferences": [
+    {
+      "type": "website",
+      "url": "https://github.com/pgp-rooms/pgp-rooms"
+    },
+    {
+      "type": "vcs",
+      "url": "https://github.com/pgp-rooms/pgp-rooms.git"
+    }
+  ]
+}
