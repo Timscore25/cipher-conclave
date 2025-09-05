@@ -199,6 +199,57 @@ export type Database = {
           },
         ]
       }
+      room_invites: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          inviter_device_id: string
+          max_uses: number
+          redeemed_at: string | null
+          room_id: string
+          token: string
+          uses_count: number
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          inviter_device_id: string
+          max_uses?: number
+          redeemed_at?: string | null
+          room_id: string
+          token: string
+          uses_count?: number
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          inviter_device_id?: string
+          max_uses?: number
+          redeemed_at?: string | null
+          room_id?: string
+          token?: string
+          uses_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_invites_inviter_device_id_fkey"
+            columns: ["inviter_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_invites_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_members: {
         Row: {
           added_at: string
@@ -290,20 +341,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      accept_invitation: {
-        Args: { p_device_fingerprint: string; p_invitation_id: string }
+      accept_invite: {
+        Args: { p_device_fingerprint: string; p_token: string }
         Returns: string
       }
-      create_room_invitation: {
-        Args: {
-          p_expires_at: string
-          p_room_id: string
-          p_uses_remaining?: number
-        }
+      cleanup_expired_invites: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      create_room_invite: {
+        Args: { p_expires_at: string; p_max_uses?: number; p_room_id: string }
         Returns: string
       }
-      get_invitation_info: {
-        Args: { p_invitation_id: string }
+      generate_invite_token: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_invite_info: {
+        Args: { p_token: string }
         Returns: Json
       }
     }
