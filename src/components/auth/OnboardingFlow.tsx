@@ -31,24 +31,35 @@ export default function OnboardingFlow() {
   const handleCreateDevice = async () => {
     setError(null);
 
-    if (!deviceForm.label.trim()) {
+    // Comprehensive validation
+    if (typeof deviceForm.label !== 'string' || !deviceForm.label.trim()) {
       setError('Device label is required');
       return;
     }
 
-    if (deviceForm.passphrase.length < 12) {
+    if (typeof deviceForm.passphrase !== 'string' || deviceForm.passphrase.length < 12) {
       setError('Passphrase must be at least 12 characters long');
       return;
     }
 
-    if (deviceForm.passphrase !== deviceForm.confirmPassphrase) {
+    if (typeof deviceForm.confirmPassphrase !== 'string' || deviceForm.passphrase !== deviceForm.confirmPassphrase) {
       setError('Passphrases do not match');
       return;
     }
 
+    // Additional passphrase strength check
+    if (deviceForm.passphrase.length > 128) {
+      setError('Passphrase is too long (maximum 128 characters)');
+      return;
+    }
+
     try {
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[OnboardingFlow] Creating device with validation passed');
+      }
+
       const keys = await createDevice({
-        label: deviceForm.label,
+        label: deviceForm.label.trim(),
         name: user?.user_metadata?.display_name || 'User',
         email: user?.email,
         passphrase: deviceForm.passphrase,
@@ -62,7 +73,12 @@ export default function OnboardingFlow() {
         description: 'Your encryption keys have been generated and secured.',
       });
     } catch (err: any) {
-      setError(err.message || 'Failed to create device');
+      const errorMessage = err.message || 'Failed to create device';
+      setError(errorMessage);
+      
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.error('[OnboardingFlow] Device creation failed:', err);
+      }
     }
   };
 

@@ -29,6 +29,23 @@ export class PGPProvider implements CryptoProvider {
   }> {
     await this.ensureInitialized();
 
+    // Validate inputs
+    if (typeof opts.passphrase !== 'string' || opts.passphrase.trim().length < 8) {
+      throw new Error('Passphrase must be at least 8 characters long');
+    }
+    if (typeof opts.name !== 'string' || opts.name.trim().length === 0) {
+      throw new Error('Name is required');
+    }
+
+    // Debug logging
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Generating identity for:', { 
+        name: opts.name, 
+        email: opts.email,
+        passphraseLength: opts.passphrase.length 
+      });
+    }
+
     // Generate PGP keypair
     const keyResult = await openpgp.generateKey({
       type: 'ecc',
@@ -36,6 +53,13 @@ export class PGPProvider implements CryptoProvider {
       userIDs: [{ name: opts.name, email: opts.email }],
       passphrase: undefined, // We'll encrypt separately
     });
+
+    if (!keyResult.privateKey) {
+      throw new Error('Failed to generate private key');
+    }
+    if (!keyResult.publicKey) {
+      throw new Error('Failed to generate public key');
+    }
 
     const privateKey = await openpgp.readPrivateKey({ armoredKey: keyResult.privateKey });
     const publicKey = await openpgp.readKey({ armoredKey: keyResult.publicKey });
@@ -46,6 +70,13 @@ export class PGPProvider implements CryptoProvider {
       keyResult.privateKey,
       opts.passphrase
     );
+
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Generated identity:', { 
+        fingerprint, 
+        wrappedKeySize: privateKeyWrapped.length 
+      });
+    }
 
     return {
       publicKeyArmored: keyResult.publicKey,
@@ -60,12 +91,31 @@ export class PGPProvider implements CryptoProvider {
   ): Promise<UnlockedKeyHandle> {
     await this.ensureInitialized();
 
+    // Validate inputs
+    if (!wrapped || wrapped.length === 0) {
+      throw new Error('Wrapped private key is required');
+    }
+    if (typeof passphrase !== 'string' || passphrase.length === 0) {
+      throw new Error('Passphrase is required');
+    }
+
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Unlocking private key:', { 
+        wrappedSize: wrapped.length,
+        passphraseLength: passphrase.length 
+      });
+    }
+
     const armoredPrivateKey = await this.unwrapPrivateKey(wrapped, passphrase);
     const privateKey = await openpgp.readPrivateKey({
       armoredKey: armoredPrivateKey,
     });
     const publicKey = privateKey.toPublic();
     const fingerprint = publicKey.getFingerprint();
+
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Successfully unlocked key:', { fingerprint });
+    }
 
     return {
       privateKey,
@@ -328,16 +378,37 @@ export class PGPProvider implements CryptoProvider {
   ): Promise<Uint8Array> {
     await this.ensureInitialized();
 
+    // Validate inputs
+    if (typeof armoredPrivateKey !== 'string' || armoredPrivateKey.length === 0) {
+      throw new Error('Private key is required for wrapping');
+    }
+    if (typeof passphrase !== 'string' || passphrase.length === 0) {
+      throw new Error('Passphrase is required for wrapping');
+    }
+
+    // Generate salt and convert passphrase to bytes for KDF
     const salt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
+    const passphraseBytes = new TextEncoder().encode(passphrase);
+    
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Wrapping private key:', { 
+        saltLength: salt.length,
+        passphraseByteLength: passphraseBytes.length,
+        privateKeyLength: armoredPrivateKey.length
+      });
+    }
+
+    // Derive key using Argon2id
     const key = sodium.crypto_pwhash(
       32,
-      passphrase,
+      passphraseBytes,
       salt,
       sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
       sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
       sodium.crypto_pwhash_ALG_ARGON2ID
     );
 
+    // Encrypt with XChaCha20-Poly1305
     const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const privateKeyBytes = new TextEncoder().encode(armoredPrivateKey);
     const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
@@ -349,7 +420,16 @@ export class PGPProvider implements CryptoProvider {
     );
 
     // Combine salt + nonce + ciphertext
-    return new Uint8Array([...salt, ...nonce, ...ciphertext]);
+    const result = new Uint8Array([...salt, ...nonce, ...ciphertext]);
+    
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Private key wrapped:', { 
+        wrappedSize: result.length,
+        expectedMinSize: salt.length + nonce.length + privateKeyBytes.length + 16 // +16 for poly1305 tag
+      });
+    }
+
+    return result;
   }
 
   private async unwrapPrivateKey(
@@ -358,6 +438,20 @@ export class PGPProvider implements CryptoProvider {
   ): Promise<string> {
     await this.ensureInitialized();
 
+    // Validate inputs
+    if (!wrapped || wrapped.length === 0) {
+      throw new Error('Wrapped key data is required for unwrapping');
+    }
+    if (typeof passphrase !== 'string' || passphrase.length === 0) {
+      throw new Error('Passphrase is required for unwrapping');
+    }
+
+    const expectedMinSize = sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES + 16;
+    if (wrapped.length < expectedMinSize) {
+      throw new Error(`Wrapped key data is too small (${wrapped.length} bytes, expected at least ${expectedMinSize})`);
+    }
+
+    // Extract components
     const salt = wrapped.slice(0, sodium.crypto_pwhash_SALTBYTES);
     const nonce = wrapped.slice(
       sodium.crypto_pwhash_SALTBYTES,
@@ -367,15 +461,30 @@ export class PGPProvider implements CryptoProvider {
       sodium.crypto_pwhash_SALTBYTES + sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
     );
 
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Unwrapping private key:', { 
+        wrappedSize: wrapped.length,
+        saltLength: salt.length,
+        nonceLength: nonce.length,
+        ciphertextLength: ciphertext.length,
+        passphraseLength: passphrase.length
+      });
+    }
+
+    // Convert passphrase to bytes for KDF
+    const passphraseBytes = new TextEncoder().encode(passphrase);
+
+    // Derive key using Argon2id
     const key = sodium.crypto_pwhash(
       32,
-      passphrase,
+      passphraseBytes,
       salt,
       sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
       sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
       sodium.crypto_pwhash_ALG_ARGON2ID
     );
 
+    // Decrypt
     const decrypted = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
       null,
       ciphertext,
@@ -384,7 +493,19 @@ export class PGPProvider implements CryptoProvider {
       key
     );
 
-    return new TextDecoder().decode(decrypted);
+    if (!decrypted) {
+      throw new Error('Failed to decrypt private key - incorrect passphrase or corrupted data');
+    }
+
+    const result = new TextDecoder().decode(decrypted);
+    
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[PGP] Private key unwrapped successfully:', { 
+        decryptedLength: result.length 
+      });
+    }
+
+    return result;
   }
 }
 

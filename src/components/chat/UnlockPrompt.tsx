@@ -20,11 +20,37 @@ export default function UnlockPrompt() {
     setError(null);
     setLoading(true);
 
+    // Validate passphrase input
+    if (typeof passphrase !== 'string' || passphrase.length === 0) {
+      setError('Passphrase is required');
+      setLoading(false);
+      return;
+    }
+
     try {
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[UnlockPrompt] Attempting to unlock device:', { 
+          fingerprint: currentDeviceFingerprint,
+          passphraseLength: passphrase.length 
+        });
+      }
+
       await unlockDevice(currentDeviceFingerprint, passphrase);
       setPassphrase('');
+      
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[UnlockPrompt] Device unlocked successfully');
+      }
     } catch (err: any) {
-      setError('Invalid passphrase. Please try again.');
+      const errorMessage = err.message?.includes('incorrect passphrase') || err.message?.includes('Failed to decrypt')
+        ? 'Invalid passphrase. Please try again.'
+        : err.message || 'Failed to unlock device';
+      
+      setError(errorMessage);
+      
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.error('[UnlockPrompt] Unlock failed:', err);
+      }
     } finally {
       setLoading(false);
     }

@@ -57,6 +57,26 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
     set({ loading: true });
 
     try {
+      // Validate input parameters
+      if (typeof opts.passphrase !== 'string' || opts.passphrase.trim().length < 8) {
+        throw new Error('Passphrase must be at least 8 characters long');
+      }
+      if (typeof opts.label !== 'string' || opts.label.trim().length === 0) {
+        throw new Error('Device label is required');
+      }
+      if (typeof opts.name !== 'string' || opts.name.trim().length === 0) {
+        throw new Error('Name is required');
+      }
+
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[CryptoStore] Creating device:', { 
+          label: opts.label, 
+          name: opts.name,
+          hasEmail: !!opts.email,
+          passphraseLength: opts.passphrase.length
+        });
+      }
+
       const result = await pgpProvider.generateIdentity(opts);
       
       // Generate a unique device ID
@@ -65,7 +85,7 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
       await keyVault.storeDevice({
         id: deviceId,
         userId: crypto.randomUUID(), // Will be replaced with actual user ID after auth
-        label: opts.label,
+        label: opts.label.trim(),
         fingerprint: result.fingerprint,
         publicKeyArmored: result.publicKeyArmored,
         privateKeyWrapped: result.privateKeyWrapped,
@@ -77,17 +97,42 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
         loading: false,
       });
 
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.log('[CryptoStore] Device created successfully:', { 
+          fingerprint: result.fingerprint,
+          deviceId 
+        });
+      }
+
       return {
         fingerprint: result.fingerprint,
         publicKey: result.publicKeyArmored,
       };
     } catch (error) {
       set({ loading: false });
+      if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+        console.error('[CryptoStore] Failed to create device:', error);
+      }
       throw error;
     }
   },
 
   unlockDevice: async (fingerprint: string, passphrase: string) => {
+    // Validate inputs
+    if (typeof fingerprint !== 'string' || fingerprint.length === 0) {
+      throw new Error('Device fingerprint is required');
+    }
+    if (typeof passphrase !== 'string' || passphrase.length === 0) {
+      throw new Error('Passphrase is required');
+    }
+
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[CryptoStore] Unlocking device:', { 
+        fingerprint,
+        passphraseLength: passphrase.length 
+      });
+    }
+
     const device = await keyVault.getDeviceByFingerprint(fingerprint);
     if (!device) {
       throw new Error('Device not found');
@@ -103,6 +148,10 @@ export const useCryptoStore = create<CryptoState>((set, get) => ({
     set({
       unlockedKeys: keyVault.getUnlockedKeyFingerprints(),
     });
+
+    if (import.meta.env.VITE_DEBUG_CRYPTO === 'true') {
+      console.log('[CryptoStore] Device unlocked successfully:', { fingerprint });
+    }
   },
 
   lockDevice: (fingerprint: string) => {
