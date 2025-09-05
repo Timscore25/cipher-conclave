@@ -122,6 +122,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     if (error) {
       debugLog('Sign up error:', error);
+      
+      // Handle specific error cases
+      if (error.message.includes('email_provider_disabled') || error.message.includes('Email logins are disabled')) {
+        set({ loading: false });
+        return { error: { 
+          ...error, 
+          message: 'Email sign-up is currently disabled. Please contact the administrator or check your Supabase configuration.' 
+        } };
+      }
+      
       set({ loading: false });
       return { error };
     }
@@ -147,7 +157,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) {
       debugLog('Sign in error:', error);
       
-      // Handle email confirmation error specifically
+      // Handle specific error cases
+      if (error.message.includes('email_provider_disabled') || error.message.includes('Email logins are disabled')) {
+        set({ loading: false });
+        return { error: { 
+          ...error, 
+          message: 'Email sign-in is currently disabled. Please contact the administrator or check your Supabase configuration.' 
+        } };
+      }
+      
       if (error.message.includes('email_not_confirmed') || error.message.includes('Email not confirmed')) {
         set({ 
           loading: false, 
