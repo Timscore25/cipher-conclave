@@ -7,8 +7,7 @@
     <meta name="description" content="End-to-end encrypted chat with PGP encryption and device verification">
     <meta name="author" content="PGP Rooms" />
 
-    <!-- Security Headers -->
-    <%- cspMeta %>
+    <!-- Basic Security Headers -->
     <meta http-equiv="X-Frame-Options" content="DENY">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta name="referrer" content="strict-origin-when-cross-origin">
@@ -21,21 +20,10 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="PGP Rooms - Secure Encrypted Chat" />
     <meta name="twitter:description" content="End-to-end encrypted chat with PGP encryption and device verification" />
-
-    <!-- Trusted Types Policy -->
-    <script nonce="<%- nonce %>">
-      if (window.trustedTypes && window.trustedTypes.createPolicy) {
-        window.trustedTypes.createPolicy('default', {
-          createHTML: (string) => string,
-          createScript: (string) => string,
-          createScriptURL: (string) => string,
-        });
-      }
-    </script>
   </head>
 
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx" nonce="<%- nonce %>"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
