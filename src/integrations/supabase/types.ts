@@ -537,6 +537,10 @@ export type Database = {
         Args: { p_expires_at: string; p_max_uses?: number; p_room_id: string }
         Returns: string
       }
+      create_room_with_membership: {
+        Args: { p_name: string }
+        Returns: string
+      }
       generate_invite_token: {
         Args: Record<PropertyKey, never>
         Returns: string
