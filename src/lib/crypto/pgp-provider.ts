@@ -49,12 +49,22 @@ export class PGPProvider implements CryptoProvider {
     }
 
     // Generate PGP keypair
-    const keyResult = await openpgp.generateKey({
-      type: 'ecc',
-      curve: 'curve25519',
-      userIDs: [{ name, email: opts.email }],
-      passphrase: undefined, // We'll encrypt separately
-    });
+    const userIdObj: any = { name };
+    const emailStr = typeof opts.email === 'string' ? opts.email.trim() : '';
+    if (emailStr.length > 0) userIdObj.email = emailStr;
+
+    let keyResult: any;
+    try {
+      keyResult = await openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519',
+        userIDs: [userIdObj],
+        passphrase: undefined, // We'll encrypt separately
+      });
+    } catch (e: any) {
+      console.error('[PGP] generateKey failed:', e);
+      throw new Error('Key generation failed. Please try again.');
+    }
 
     if (!keyResult.privateKey) {
       throw new Error('Failed to generate private key');
