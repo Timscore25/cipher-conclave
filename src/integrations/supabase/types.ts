@@ -164,6 +164,183 @@ export type Database = {
           },
         ]
       }
+      mls_app_messages: {
+        Row: {
+          authenticated_data: string | null
+          ciphertext: string
+          content_type: string
+          created_at: string
+          epoch: number
+          group_id: string
+          id: string
+          local_seq_id: string | null
+          sender_device_id: string
+          seq: number
+        }
+        Insert: {
+          authenticated_data?: string | null
+          ciphertext: string
+          content_type?: string
+          created_at?: string
+          epoch: number
+          group_id: string
+          id?: string
+          local_seq_id?: string | null
+          sender_device_id: string
+          seq: number
+        }
+        Update: {
+          authenticated_data?: string | null
+          ciphertext?: string
+          content_type?: string
+          created_at?: string
+          epoch?: number
+          group_id?: string
+          id?: string
+          local_seq_id?: string | null
+          sender_device_id?: string
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mls_app_messages_sender_device_id_fkey"
+            columns: ["sender_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mls_groups: {
+        Row: {
+          created_at: string
+          created_by_device_id: string
+          current_epoch: number
+          group_id: string
+          group_state: string
+          id: string
+          room_id: string
+          state_checksum: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_device_id: string
+          current_epoch?: number
+          group_id: string
+          group_state: string
+          id?: string
+          room_id: string
+          state_checksum: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_device_id?: string
+          current_epoch?: number
+          group_id?: string
+          group_state?: string
+          id?: string
+          room_id?: string
+          state_checksum?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mls_groups_created_by_device_id_fkey"
+            columns: ["created_by_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mls_groups_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: true
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mls_handshake_messages: {
+        Row: {
+          created_at: string
+          epoch: number
+          group_id: string
+          id: string
+          local_seq_id: string | null
+          message_data: string
+          message_type: string
+          sender_device_id: string
+          seq: number
+        }
+        Insert: {
+          created_at?: string
+          epoch: number
+          group_id: string
+          id?: string
+          local_seq_id?: string | null
+          message_data: string
+          message_type: string
+          sender_device_id: string
+          seq: number
+        }
+        Update: {
+          created_at?: string
+          epoch?: number
+          group_id?: string
+          id?: string
+          local_seq_id?: string | null
+          message_data?: string
+          message_type?: string
+          sender_device_id?: string
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mls_handshake_messages_sender_device_id_fkey"
+            columns: ["sender_device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mls_key_packages: {
+        Row: {
+          created_at: string
+          device_id: string
+          expires_at: string
+          id: string
+          key_package: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          expires_at?: string
+          id?: string
+          key_package: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          expires_at?: string
+          id?: string
+          key_package?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mls_key_packages_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_invitations: {
         Row: {
           created_at: string
@@ -289,18 +466,21 @@ export type Database = {
       rooms: {
         Row: {
           created_at: string
+          crypto_mode: string
           id: string
           name: string
           owner_user_id: string
         }
         Insert: {
           created_at?: string
+          crypto_mode?: string
           id?: string
           name: string
           owner_user_id: string
         }
         Update: {
           created_at?: string
+          crypto_mode?: string
           id?: string
           name?: string
           owner_user_id?: string
