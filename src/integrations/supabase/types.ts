@@ -549,6 +549,14 @@ export type Database = {
         Args: { p_token: string }
         Returns: Json
       }
+      user_is_room_admin: {
+        Args: { _room_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_is_room_member: {
+        Args: { _room_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       message_content_type: "text" | "file" | "system"
