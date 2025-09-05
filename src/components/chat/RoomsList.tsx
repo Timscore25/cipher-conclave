@@ -130,6 +130,12 @@ export function RoomsList() {
                 <div className="flex items-center space-x-2 min-w-0 flex-1">
                   <Hash className="w-4 h-4 flex-shrink-0" />
                   <span className="font-medium truncate">{room.name}</span>
+                  <Badge 
+                    variant={room.crypto_mode === 'mls' ? 'default' : 'secondary'} 
+                    className="text-xs ml-2"
+                  >
+                    {room.crypto_mode?.toUpperCase() || 'PGP'}
+                  </Badge>
                 </div>
                 {room.member_count && (
                   <Badge variant="secondary" className="ml-2">

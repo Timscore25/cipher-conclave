@@ -247,6 +247,7 @@ export const useMLSStore = create<MLSState>((set, get) => ({
     }
   },
 
+  // Send to delivery service
   sendMessage: async (roomId: string, plaintext: string, attachments?: File[]) => {
     set({ isLoading: true, error: null });
     
@@ -295,18 +296,17 @@ export const useMLSStore = create<MLSState>((set, get) => ({
       );
 
       // Send to delivery service
-      const messageData = {
-        group_id: btoa(String.fromCharCode(...message.groupId)),
-        epoch: message.epoch,
-        ciphertext: btoa(String.fromCharCode(...ciphertext)),
-        authenticated_data: message.authenticatedData ? 
-          btoa(String.fromCharCode(...message.authenticatedData)) : null,
-        content_type: 'text',
-        local_seq_id: `app-${Date.now()}-${Math.random()}`,
-      };
-
-      const { data, error } = await supabase.functions.invoke('mls-app/send', {
-        body: messageData,
+      const { data, error } = await supabase.functions.invoke('mls-app', {
+        body: {
+          action: 'send',
+          group_id: btoa(String.fromCharCode(...message.groupId)),
+          epoch: message.epoch,
+          ciphertext: btoa(String.fromCharCode(...ciphertext)),
+          authenticated_data: message.authenticatedData ? 
+            btoa(String.fromCharCode(...message.authenticatedData)) : null,
+          content_type: 'text',
+          local_seq_id: `app-${Date.now()}-${Math.random()}`,
+        }
       });
 
       if (error) {
@@ -321,6 +321,7 @@ export const useMLSStore = create<MLSState>((set, get) => ({
     }
   },
 
+  // Load messages from delivery service
   loadMessages: async (roomId: string, sinceSeq?: number) => {
     set({ isLoading: true, error: null });
     
@@ -329,29 +330,26 @@ export const useMLSStore = create<MLSState>((set, get) => ({
       const groupState = state.groupStates.get(roomId);
       
       if (!groupState) {
-        // Try to load group state first
+        // Try to sync group state first
         await get().syncGroupState(roomId);
         const updatedState = get();
         const loadedGroupState = updatedState.groupStates.get(roomId);
         if (!loadedGroupState) {
-          throw new Error('Group not found');
+          throw new Error('Group not found - room may not be using MLS');
         }
       }
 
       const currentGroupState = get().groupStates.get(roomId)!;
       const groupIdBase64 = btoa(String.fromCharCode(...currentGroupState.groupId));
 
-      // Load messages from delivery service
-      const params = new URLSearchParams({
-        group_id: groupIdBase64,
-        limit: '100',
+      // Load messages from delivery service  
+      const { data, error } = await supabase.functions.invoke('mls-app/list', {
+        body: { 
+          group_id: groupIdBase64,
+          limit: 50,
+          since_seq: sinceSeq 
+        }
       });
-      
-      if (sinceSeq !== undefined) {
-        params.set('since_seq', sinceSeq.toString());
-      }
-
-      const { data, error } = await supabase.functions.invoke(`mls-app/list?${params.toString()}`);
 
       if (error) {
         throw new Error(`Failed to load messages: ${error.message}`);

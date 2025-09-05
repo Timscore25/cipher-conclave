@@ -6,6 +6,7 @@ interface Room {
   id: string;
   name: string;
   owner_user_id: string;
+  crypto_mode: 'pgp' | 'mls';
   created_at: string;
   member_count?: number;
 }
@@ -49,6 +50,7 @@ export const useRoomsStore = create<RoomsState>((set, get) => ({
         id: room.id,
         name: room.name,
         owner_user_id: room.owner_user_id,
+        crypto_mode: (room.crypto_mode || 'pgp') as 'pgp' | 'mls',
         created_at: room.created_at,
         member_count: room.room_members?.length || 0,
       }));

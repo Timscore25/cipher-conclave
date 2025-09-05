@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useRoomsStore } from '@/lib/stores/rooms-store';
 import { useMessagesStore, type Message } from '@/lib/stores/messages-store';
+import { useMLSStore, type MLSMessageDisplay } from '@/lib/stores/mls-store';
 import { useCryptoStore } from '@/lib/stores/crypto-store';
 import { useVerificationStore } from '@/lib/stores/verification-store';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +15,7 @@ import { ShowQRDialog } from '@/components/verification/ShowQRDialog';
 import { ScanQRDialog } from '@/components/verification/ScanQRDialog';
 import { InviteDialog } from '@/components/invitations/InviteDialog';
 import { ExportDialog } from '@/components/export/ExportDialog';
+import { MLSMigrationBanner } from '@/components/mls/MLSMigrationBanner';
 
 export default function ChatView() {
   const [message, setMessage] = useState('');
@@ -34,24 +36,44 @@ export default function ChatView() {
     clearError
   } = useMessagesStore();
 
+  const {
+    messagesByGroup: mlsMessagesByGroup,
+    isLoading: mlsIsLoading,
+    error: mlsError,
+    loadMessages: loadMLSMessages,
+    sendMessage: sendMLSMessage,
+    clearError: clearMLSError
+  } = useMLSStore();
+
   const { currentDeviceFingerprint } = useCryptoStore();
   const { isFingerrintVerified, loadVerifications } = useVerificationStore();
   const { toast } = useToast();
 
   const currentRoom = rooms.find(r => r.id === currentRoomId);
-  const messages = currentRoomId ? messagesByRoom[currentRoomId] || [] : [];
+  const isMLS = currentRoom?.crypto_mode === 'mls';
+  
+  // Use appropriate store based on crypto mode
+  const messages = currentRoomId ? (isMLS ? mlsMessagesByGroup.get(currentRoomId) || [] : messagesByRoom[currentRoomId] || []) : [];
+  const storeIsLoading = isMLS ? mlsIsLoading : isLoading;
+  const storeError = isMLS ? mlsError : error;
 
   // Load messages and subscribe when room changes
   useEffect(() => {
-    if (currentRoomId) {
-      loadMessages(currentRoomId);
-      subscribeToRoom(currentRoomId);
+    if (currentRoomId && currentRoom) {
+      if (isMLS) {
+        loadMLSMessages(currentRoomId);
+      } else {
+        loadMessages(currentRoomId);
+        subscribeToRoom(currentRoomId);
+      }
     }
     
     return () => {
-      unsubscribeFromRoom();
+      if (!isMLS) {
+        unsubscribeFromRoom();
+      }
     };
-  }, [currentRoomId, loadMessages, subscribeToRoom, unsubscribeFromRoom]);
+  }, [currentRoomId, currentRoom, isMLS, loadMessages, loadMLSMessages, subscribeToRoom, unsubscribeFromRoom]);
 
   // Load verifications on mount
   useEffect(() => {
@@ -64,38 +86,30 @@ export default function ChatView() {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if ((!message.trim() && attachments.length === 0) || !currentRoomId) return;
+    if ((!message.trim() && attachments.length === 0) || !currentRoomId || !currentRoom) return;
 
     setIsSending(true);
     try {
-      await sendMessage(currentRoomId, message.trim(), attachments.length > 0 ? attachments : undefined);
+      if (isMLS) {
+        await sendMLSMessage(currentRoomId, message.trim(), attachments.length > 0 ? attachments : undefined);
+      } else {
+        await sendMessage(currentRoomId, message.trim(), attachments.length > 0 ? attachments : undefined);
+      }
       setMessage('');
       setAttachments([]);
       toast({
         title: "Message sent",
-        description: "Your message has been encrypted and sent.",
+        description: `Your message has been encrypted with ${isMLS ? 'MLS' : 'PGP'} and sent.`,
       });
     } catch (error) {
       toast({
         title: "Failed to send message",
-        description: "An error occurred while sending your message.",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
         variant: "destructive",
       });
     } finally {
       setIsSending(false);
     }
-  };
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    setAttachments(prev => [...prev, ...files]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const formatTime = (dateString: string) => {
@@ -105,59 +119,33 @@ export default function ChatView() {
     });
   };
 
-  const renderMessage = (msg: Message) => {
+  // Unified message rendering
+  const renderMessage = (msg: Message | MLSMessageDisplay) => {
+    const isMlsMsg = 'groupId' in msg;
     const hasError = !!msg.decryptionError;
-    const isVerified = msg.isVerified && !hasError;
-    const isSignerVerified = isFingerrintVerified(msg.signer_fpr);
+    const isVerified = isMlsMsg ? msg.verified : (msg.isVerified && !hasError);
+    const senderFpr = isMlsMsg ? msg.sender : msg.signer_fpr;
+    const isSignerVerified = isFingerrintVerified(senderFpr);
+    const messageText = isMlsMsg ? msg.content : msg.decryptedText;
+    const messageAttachments = isMlsMsg ? msg.attachments : msg.decryptedAttachments;
 
     return (
       <div key={msg.id} className="mb-4 p-3 rounded-lg bg-card">
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center space-x-2">
             <span className="font-medium text-sm">
-              {msg.devices?.label || 'Unknown Device'}
+              {isMlsMsg ? (msg.senderLabel || 'Unknown Device') : (msg.devices?.label || 'Unknown Device')}
             </span>
             {isVerified && (
               <Badge variant="secondary" className="text-xs">
                 <Shield className="w-3 h-3 mr-1" />
-                Verified
-              </Badge>
-            )}
-            {isSignerVerified && (
-              <Badge variant="default" className="text-xs">
-                <Shield className="w-3 h-3 mr-1" />
-                Trusted
-              </Badge>
-            )}
-            {hasError && (
-              <Badge variant="destructive" className="text-xs">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                Decrypt Error
+                Verified {isMlsMsg ? '(MLS)' : '(PGP)'}
               </Badge>
             )}
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-muted-foreground">
-              {formatTime(msg.created_at)}
-            </span>
-            {!hasError && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-                    <MoreVertical className="w-3 h-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <ExportDialog message={msg}>
-                    <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Export Message
-                    </DropdownMenuItem>
-                  </ExportDialog>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+          <span className="text-xs text-muted-foreground">
+            {formatTime(isMlsMsg ? msg.timestamp : msg.created_at)}
+          </span>
         </div>
 
         {hasError ? (
@@ -166,34 +154,18 @@ export default function ChatView() {
           </div>
         ) : (
           <>
-            {msg.decryptedText && (
+            {messageText && (
               <div className="text-sm whitespace-pre-wrap break-words">
-                {msg.decryptedText}
+                {messageText}
               </div>
             )}
             
-            {msg.decryptedAttachments && msg.decryptedAttachments.length > 0 && (
+            {messageAttachments && messageAttachments.length > 0 && (
               <div className="mt-2 space-y-2">
-                {msg.decryptedAttachments.map((attachment, index) => (
+                {messageAttachments.map((attachment, index) => (
                   <div key={index} className="flex items-center space-x-2 p-2 bg-accent rounded">
                     <FileText className="w-4 h-4" />
                     <span className="text-sm flex-1">{attachment.name}</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        // Create download link for decrypted file
-                        const blob = new Blob([attachment.data], { type: attachment.mimeType });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = attachment.name;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                    >
-                      <Download className="w-4 h-4" />
-                    </Button>
                   </div>
                 ))}
               </div>
@@ -217,29 +189,31 @@ export default function ChatView() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Migration Banner for PGP rooms */}
+      {currentRoom && !isMLS && (
+        <MLSMigrationBanner 
+          roomId={currentRoomId} 
+          onMigrationComplete={() => {
+            if (currentRoomId) {
+              loadMLSMessages(currentRoomId);
+            }
+          }}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
-        <div>
-          <h2 className="text-lg font-semibold">{currentRoom?.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            End-to-end encrypted chat
-          </p>
+        <div className="flex items-center space-x-2">
+          <h1 className="text-xl font-semibold">
+            {currentRoom?.name || 'Select a room'}
+          </h1>
+          {currentRoom && (
+            <Badge variant={isMLS ? "default" : "secondary"} className="text-xs">
+              {isMLS ? 'MLS' : 'PGP'}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center space-x-2">
-          <ShowQRDialog>
-            <Button size="sm" variant="outline">
-              <QrCode className="w-4 h-4 mr-2" />
-              Show QR
-            </Button>
-          </ShowQRDialog>
-          
-          <ScanQRDialog>
-            <Button size="sm" variant="outline">
-              <Camera className="w-4 h-4 mr-2" />
-              Scan QR
-            </Button>
-          </ScanQRDialog>
-          
           <InviteDialog roomId={currentRoomId} roomName={currentRoom?.name || 'Room'}>
             <Button size="sm" variant="default">
               <UserPlus className="w-4 h-4 mr-2" />
@@ -252,7 +226,7 @@ export default function ChatView() {
       {/* Messages */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
-          {isLoading && messages.length === 0 ? (
+          {storeIsLoading && messages.length === 0 ? (
             <div className="text-center text-muted-foreground">
               Loading messages...
             </div>
@@ -265,9 +239,9 @@ export default function ChatView() {
             messages.map(renderMessage)
           )}
           
-          {error && (
+          {storeError && (
             <div className="text-center text-destructive text-sm">
-              {error}
+              {storeError}
             </div>
           )}
         </div>
@@ -276,71 +250,32 @@ export default function ChatView() {
 
       {/* Message Composer */}
       <div className="p-4 border-t">
-        {attachments.length > 0 && (
-          <div className="mb-3 space-y-2">
-            {attachments.map((file, index) => (
-              <div key={index} className="flex items-center space-x-2 p-2 bg-accent rounded text-sm">
-                <FileText className="w-4 h-4" />
-                <span className="flex-1">{file.name}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => removeAttachment(index)}
-                >
-                  ×
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
         <div className="flex space-x-2">
-          <div className="flex-1 space-y-2">
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message..."
-              className="resize-none"
-              rows={1}
-              disabled={!currentDeviceFingerprint}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (!isSending) {
-                    handleSendMessage();
-                  }
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Type your message..."
+            className="resize-none flex-1"
+            rows={1}
+            disabled={!currentDeviceFingerprint}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!isSending) {
+                  handleSendMessage();
                 }
-              }}
-            />
-          </div>
+              }
+            }}
+          />
           
-          <div className="flex flex-col space-y-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!currentDeviceFingerprint}
-            >
-              <Paperclip className="w-4 h-4" />
-            </Button>
-            
-            <Button
-              onClick={handleSendMessage}
-              disabled={(!message.trim() && attachments.length === 0) || isSending || !currentDeviceFingerprint}
-              size="sm"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
+          <Button
+            onClick={handleSendMessage}
+            disabled={(!message.trim() && attachments.length === 0) || isSending || !currentDeviceFingerprint}
+            size="sm"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
         </div>
-
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          multiple
-          className="hidden"
-        />
 
         {!currentDeviceFingerprint && (
           <div className="mt-2 text-xs text-muted-foreground text-center">
