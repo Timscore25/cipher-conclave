@@ -9,8 +9,9 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { Lock, Shield, Users } from 'lucide-react';
 
 export default function AuthFlow() {
-  const { signIn, signUp, loading } = useAuthStore();
+  const { signIn, signUp, resendConfirmation, loading, emailConfirmationRequired } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   
   const [signInForm, setSignInForm] = useState({
     email: '',
@@ -27,6 +28,7 @@ export default function AuthFlow() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
 
     const { error } = await signIn(signInForm.email, signInForm.password);
     if (error) {
@@ -37,6 +39,7 @@ export default function AuthFlow() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
 
     if (signUpForm.password !== signUpForm.confirmPassword) {
       setError('Passwords do not match');
@@ -48,9 +51,34 @@ export default function AuthFlow() {
       return;
     }
 
-    const { error } = await signUp(signUpForm.email, signUpForm.password, signUpForm.displayName);
+    const { error, emailConfirmationRequired } = await signUp(
+      signUpForm.email, 
+      signUpForm.password, 
+      signUpForm.displayName
+    );
+    
     if (error) {
       setError(error.message);
+    } else if (emailConfirmationRequired) {
+      setSuccess('Account created! Please check your email and click the confirmation link to complete registration.');
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    setError(null);
+    setSuccess(null);
+    
+    const email = signInForm.email || signUpForm.email;
+    if (!email) {
+      setError('Please enter your email address');
+      return;
+    }
+    
+    const { error } = await resendConfirmation(email);
+    if (error) {
+      setError(error.message);
+    } else {
+      setSuccess('Confirmation email sent! Please check your inbox.');
     }
   };
 
@@ -102,6 +130,28 @@ export default function AuthFlow() {
               {error && (
                 <Alert variant="destructive" className="mb-4">
                   <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              
+              {success && (
+                <Alert className="mb-4 border-green-200 bg-green-50">
+                  <AlertDescription className="text-green-800">{success}</AlertDescription>
+                </Alert>
+              )}
+
+              {emailConfirmationRequired && (
+                <Alert className="mb-4 border-blue-200 bg-blue-50">
+                  <AlertDescription className="text-blue-800">
+                    Please check your email and click the confirmation link to complete your registration.
+                    <Button 
+                      variant="link" 
+                      className="p-0 h-auto text-blue-600 underline ml-1"
+                      onClick={handleResendConfirmation}
+                      disabled={loading}
+                    >
+                      Resend confirmation email
+                    </Button>
+                  </AlertDescription>
                 </Alert>
               )}
 
